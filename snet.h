@@ -31,7 +31,7 @@ int	snet_eof ___P(( SNET * ));
 SNET	*snet_attach ___P(( int, int ));
 SNET	*snet_open ___P(( char *, int, int, int ));
 int	snet_close ___P(( SNET * ));
-int	snet_writef ___P(( SNET *, char *, ... ));
+ssize_t	snet_writef ___P(( SNET *, char *, ... ));
 char	*snet_getline ___P(( SNET *, struct timeval * ));
 char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 		struct timeval * ));
