@@ -1,5 +1,5 @@
-SRC = net.c
-OBJ = net.o
+SRC = snet.c
+OBJ = snet.o
 
 INCPATH=
 OPTOPTS=	-Wall -Wstrict-prototypes
@@ -7,15 +7,15 @@ CFLAGS=	${DEFS} ${OPTOPTS} ${INCPATH}
 TAGSFILE=	tags
 CC=	gcc
 
-all : libnet.a
+all : libsnet.a
 
-libnet.a libnet_p.a : ${OBJ}
-	@echo "building profiled libnet"
-	@cd profiled; ar cru ../libnet_p.a ${OBJ}
-	@ranlib libnet_p.a
-	@echo "building normal libnet.a"
-	@ar cru libnet.a ${OBJ}
-	@ranlib libnet.a
+libsnet.a libsnet_p.a : ${OBJ}
+	@echo "building profiled libsnet"
+	@cd profiled; ar cru ../libsnet_p.a ${OBJ}
+	@ranlib libsnet_p.a
+	@echo "building normal libsnet.a"
+	@ar cru libsnet.a ${OBJ}
+	@ranlib libsnet.a
 
 .c.o :
 	${CC} -p ${CFLAGS} -c $*.c
@@ -27,7 +27,7 @@ libnet.a libnet_p.a : ${OBJ}
 
 clean :
 	rm -f *.o profiled/*.o *.bak *[Ee]rrs tags
-	rm -f libnet.a libnet_p.a
+	rm -f libsnet.a libsnet_p.a
 
 tags : ${SRC}
 	cwd=`pwd`; \
