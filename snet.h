@@ -4,17 +4,17 @@
  */
 
 typedef struct {
-    int		nh_fd;
-    char	*nh_buf;
-    char	*nh_end;
-    char	*nh_cur;
-    int		nh_buflen;
-    int		nh_maxlen;
-    int		nh_state;
-    int		nh_error;
-} NET;
+    int		sn_fd;
+    char	*sn_buf;
+    char	*sn_end;
+    char	*sn_cur;
+    int		sn_buflen;
+    int		sn_maxlen;
+    int		sn_state;
+    int		sn_eof;
+} SNET;
 
-#define net_fd( n )	((n)->nh_fd)
+#define snet_fd( sn )	((sn)->sn_fd)
 
 #ifdef __STDC__
 #define ___P(x)		x
@@ -22,10 +22,12 @@ typedef struct {
 #define ___P(x)		()
 #endif __STDC__
 
-char	*net_error ___P(( NET * ));
-NET	*net_attach ___P(( int, int ));
-NET	*net_open ___P(( char *, int, int, int ));
-int	net_close ___P(( NET * ));
-int	net_writef ___P(( NET *, char *, ... ));
-char	*net_getline ___P(( NET *, struct timeval * ));
-int	net_read ___P(( NET *, char *, int, struct timeval * ));
+int	snet_eof ___P(( SNET * ));
+SNET	*snet_attach ___P(( int, int ));
+SNET	*snet_open ___P(( char *, int, int, int ));
+int	snet_close ___P(( SNET * ));
+int	snet_writef ___P(( SNET *, char *, ... ));
+char	*snet_getline ___P(( SNET *, struct timeval * ));
+char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
+		struct timeval * ));
+int	snet_read ___P(( SNET *, char *, int, struct timeval * ));

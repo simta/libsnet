@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #ifdef __STDC__
 #include <stdarg.h>
@@ -19,63 +20,58 @@
 #include <varargs.h>
 #endif __STDC__
 
-#include "net.h"
+#include "snet.h"
 
-#define NET_BUFLEN	1024
-#define NET_IOVCNT	128
+#define SNET_BUFLEN	1024
+#define SNET_IOVCNT	128
 
-#define NET_BOL		0
-#define NET_FUZZY	1
-#define NET_IN		2
+#define SNET_BOL	0
+#define SNET_FUZZY	1
+#define SNET_IN		2
 
-#ifdef notdef
 /*
- * This routine is necessary, since net_getline() doesn't differenciate
- * between NULL => EOF and NULL => connection dropped (or some other error).
- * However, no code currently exists that uses it, so...
+ * Need SASL entry points.
+ * Need snet_write().
+ * Read and write must use SASL buffering for encryption.
+ * All routines must use snet_read() and snet_write() to access network.
  */
-    char *
-net_error( n )
-    NET		*n;
+
+/*
+ * This routine is necessary, since snet_getline() doesn't differentiate
+ * between NULL => EOF and NULL => connection dropped (or some other error).
+ */
+    int
+snet_eof( sn )
+    SNET		*sn;
 {
-    extern int	sys_nerr;
-    extern char	*sys_errlist[];
-
-    if ( n->nh_error ) {
-	if ( n->nh_error > sys_nerr ) {
-	    return( "Unknown error" );
-	}
-	return( sys_errlist[ n->nh_error ] );
-    }
-    return( NULL );
+    return ( sn->sn_eof );
 }
-#endif notdef
 
-    NET *
-net_attach( fd, max )
+    SNET *
+snet_attach( fd, max )
     int		fd;
     int		max;
 {
-    NET		*n;
+    SNET		*sn;
 
-    if (( n = (NET *)malloc( sizeof( NET ))) == NULL ) {
+    if (( sn = (SNET *)malloc( sizeof( SNET ))) == NULL ) {
 	return( NULL );
     }
-    n->nh_fd = fd;
-    if (( n->nh_buf = (char *)malloc( NET_BUFLEN )) == NULL ) {
-	free( n );
+    sn->sn_fd = fd;
+    if (( sn->sn_buf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
+	free( sn );
 	return( NULL );
     }
-    n->nh_cur = n->nh_end = n->nh_buf;
-    n->nh_buflen = NET_BUFLEN;
-    n->nh_maxlen = max;
-    n->nh_state = NET_BOL;
-    n->nh_error = 0;
-    return( n );
+    sn->sn_cur = sn->sn_end = sn->sn_buf;
+    sn->sn_buflen = SNET_BUFLEN;
+    sn->sn_maxlen = max;
+    sn->sn_state = SNET_BOL;
+    sn->sn_eof = 0;
+    return( sn );
 }
 
-    NET *
-net_open( path, flags, mode, max )
+    SNET *
+snet_open( path, flags, mode, max )
     char	*path;
     int		flags;
     int		mode;
@@ -85,23 +81,23 @@ net_open( path, flags, mode, max )
     if (( fd = open( path, flags, mode )) < 0 ) {
 	return( NULL );
     }
-    return( net_attach( fd, max ));
+    return( snet_attach( fd, max ));
 }
 
     int
-net_close( n )
-    NET		*n;
+snet_close( sn )
+    SNET		*sn;
 {
-    free( n->nh_buf );
-    if ( close( n->nh_fd ) < 0 ) {
+    free( sn->sn_buf );
+    if ( close( sn->sn_fd ) < 0 ) {
 	return( -1 );
     }
-    free( n );
+    free( sn );
     return( 0 );
 }
 
 /*
- * Just like fprintf, only use the NET header to get the fd, and use
+ * Just like fprintf, only use the SNET header to get the fd, and use
  * writev() to move the data.
  *
  * Todo: %c, %f, *, . and, -
@@ -110,10 +106,10 @@ net_close( n )
  */
     int
 #ifdef __STDC__
-net_writef( NET *n, char *format, ... )
+snet_writef( SNET *sn, char *format, ... )
 #else __STDC__
-net_writef( n, format, va_alist )
-    NET			*n;
+snet_writef( sn, format, va_alist )
+    SNET			*sn;
     char		*format;
     va_dcl
 #endif __STDC__
@@ -130,27 +126,27 @@ net_writef( n, format, va_alist )
     va_start( vl );
 #endif __STDC__
 
-    for ( state = NET_BOL, i = 0; *format; format++ ) {
+    for ( state = SNET_BOL, i = 0; *format; format++ ) {
 	/*
 	 * Make sure there's room for stuff
 	 */
 	if ( i == iovcnt ) {
 	    if ( iov == NULL ) {
 		if (( iov = (struct iovec *)
-			malloc( sizeof( struct iovec ) * NET_IOVCNT ))
+			malloc( sizeof( struct iovec ) * SNET_IOVCNT ))
 			== NULL ) {
 		    return( -1 );
 		}
-		iovcnt = NET_IOVCNT;
+		iovcnt = SNET_IOVCNT;
 	    } else {
 		abort();	/* realloc */
 	    }
 	}
 
 	if ( *format == '%' ) {
-	    if ( state == NET_IN ) {
+	    if ( state == SNET_IN ) {
 		iov[ i ].iov_len = format - (char *)iov[ i ].iov_base;
-		state = NET_BOL;
+		state = SNET_BOL;
 		i++;
 	    }
 
@@ -164,13 +160,28 @@ net_writef( n, format, va_alist )
 	    case 'd' :
 		d = va_arg( vl, int );
 		p = dbufoff;
-		while ( d ) {
+		do {
 		    if ( --dbufoff < dbuf ) {
 			abort();
 		    }
 		    *dbufoff = '0' + ( d % 10 );
 		    d /= 10;
-		}
+		} while ( d );
+		iov[ i ].iov_base = dbufoff;
+		iov[ i ].iov_len = p - dbufoff;
+		i++;
+		break;
+
+	    case 'o' :
+		d = va_arg( vl, int );
+		p = dbufoff;
+		do {
+		    if ( --dbufoff < dbuf ) {
+			abort();
+		    }
+		    *dbufoff = '0' + ( d % 8 );
+		    d /= 8;
+		} while ( d );
 		iov[ i ].iov_base = dbufoff;
 		iov[ i ].iov_len = p - dbufoff;
 		i++;
@@ -178,102 +189,141 @@ net_writef( n, format, va_alist )
 
 	    default :
 		iov[ i ].iov_base = format;
-		state = NET_IN;
+		state = SNET_IN;
 		break;
 
 	    }
 	} else {
-	    if ( state == NET_BOL ) {
+	    if ( state == SNET_BOL ) {
 		iov[ i ].iov_base = format;
-		state = NET_IN;
+		state = SNET_IN;
 	    }
 	}
     }
-    if ( state == NET_IN ) {
+    if ( state == SNET_IN ) {
 	iov[ i ].iov_len = format - (char *)iov[ i ].iov_base;
 	i++;
     }
 
     va_end( vl );
 
-    return ( writev( net_fd( n ), iov, i ));
+    return ( writev( snet_fd( sn ), iov, i ));
 }
 
 /*
  * Get a null-terminated line of input, handle CR/LF issues.
- * Note that net_getline() returns information from a common area which
+ * Note that snet_getline() returns information from a common area which
  * may be overwritten by subsequent calls.
  */
     char *
-net_getline( n, tv )
-    NET			*n;
+snet_getline( sn, tv )
+    SNET		*sn;
     struct timeval	*tv;
 {
-    char		*eol, *t;
+    char		*eol, *line;
     int			rc;
     extern int		errno;
 
-    for ( eol = n->nh_cur; ; eol++) {
-	if ( eol >= n->nh_end ) {				/* fill */
+    for ( eol = sn->sn_cur; ; eol++) {
+	if ( eol >= sn->sn_end ) {				/* fill */
 	    /* pullup */
-	    if ( n->nh_cur > n->nh_buf ) {
-		if ( n->nh_cur < n->nh_end ) {
-		    memcpy( n->nh_buf, n->nh_cur,
-			    (unsigned)( n->nh_end - n->nh_cur ));
+	    if ( sn->sn_cur > sn->sn_buf ) {
+		if ( sn->sn_cur < sn->sn_end ) {
+		    memcpy( sn->sn_buf, sn->sn_cur,
+			    (unsigned)( sn->sn_end - sn->sn_cur ));
 		}
-		eol = n->nh_end = n->nh_buf + ( n->nh_end - n->nh_cur );
-		n->nh_cur = n->nh_buf;
+		eol = sn->sn_end = sn->sn_buf + ( sn->sn_end - sn->sn_cur );
+		sn->sn_cur = sn->sn_buf;
 	    }
 
 	    /* expand */
-	    if ( n->nh_end == n->nh_buf + n->nh_buflen ) {
-		if ( n->nh_maxlen != 0 && n->nh_buflen >= n->nh_maxlen ) {
+	    if ( sn->sn_end == sn->sn_buf + sn->sn_buflen ) {
+		if ( sn->sn_maxlen != 0 && sn->sn_buflen >= sn->sn_maxlen ) {
 		    errno = ENOMEM;
 		    return( NULL );
 		}
-		if (( n->nh_buf = (char *)realloc( n->nh_buf,
-			n->nh_buflen + NET_BUFLEN )) == NULL ) {
+		if (( sn->sn_buf = (char *)realloc( sn->sn_buf,
+			sn->sn_buflen + SNET_BUFLEN )) == NULL ) {
 		    exit( 1 );
 		}
-		n->nh_buflen += NET_BUFLEN;
-		eol = n->nh_end = n->nh_buf + ( n->nh_end - n->nh_cur );
-		n->nh_cur = n->nh_buf;
+		sn->sn_buflen += SNET_BUFLEN;
+		eol = sn->sn_end = sn->sn_buf + ( sn->sn_end - sn->sn_cur );
+		sn->sn_cur = sn->sn_buf;
 	    }
 
-	    if (( rc = net_read( n, n->nh_end,
-		    n->nh_buflen - ( n->nh_end - n->nh_buf ), tv )) < 0 ) {
+	    if (( rc = snet_read( sn, sn->sn_end,
+		    sn->sn_buflen - ( sn->sn_end - sn->sn_buf ), tv )) < 0 ) {
 		return( NULL );
 	    }
 	    if ( rc == 0 ) {	/* EOF */
 		return( NULL );
 	    }
-	    n->nh_end += rc;
+	    sn->sn_end += rc;
 	}
 
 	if ( *eol == '\r' || *eol == '\0' ) {
-	    n->nh_state = NET_FUZZY;
+	    sn->sn_state = SNET_FUZZY;
 	    break;
 	}
 	if ( *eol == '\n' ) {
-	    if ( n->nh_state == NET_FUZZY ) {
-		n->nh_state = NET_BOL;
-		n->nh_cur = eol + 1;
+	    if ( sn->sn_state == SNET_FUZZY ) {
+		sn->sn_state = SNET_BOL;
+		sn->sn_cur = eol + 1;
 		continue;
 	    }
+	    sn->sn_state = SNET_BOL;
 	    break;
 	}
-	n->nh_state = NET_IN;
+	sn->sn_state = SNET_IN;
     }
 
     *eol = '\0';
-    t = n->nh_cur;
-    n->nh_cur = eol + 1;
-    return( t );
+    line = sn->sn_cur;
+    sn->sn_cur = eol + 1;
+    return( line );
+}
+
+    char * 
+snet_getline_multi( sn, logger, tv )
+    SNET		*sn;
+    void		(*logger)( char * );
+    struct timeval	*tv;
+{
+    char		*line; 
+
+    do {
+	if (( line = snet_getline( sn, tv )) == NULL ) {
+	    return ( NULL );
+	}
+
+	if ( logger != NULL ) {
+	    (*logger)( line );
+	}
+
+	if ( strlen( line ) < 3 ) {
+	    return( NULL );
+	}
+
+	if ( !isdigit( (int)line[ 0 ] ) ||
+		!isdigit( (int)line[ 1 ] ) ||
+		!isdigit( (int)line[ 2 ] )) {
+	    return( NULL );
+	}
+
+	if ( line[ 3 ] != '\0' &&
+		line[ 3 ] != ' ' &&
+		line [ 3 ] != '-' ) {
+	    return ( NULL );
+	}
+
+    } while ( line[ 3 ] == '-' );
+
+    return( line );
 }
 
     int
-net_read( n, buf, len, tv )
-    NET			*n;
+snet_read( sn, buf, len, tv )
+    SNET		*sn;
     char		*buf;
     int			len;
     struct timeval	*tv;
@@ -282,21 +332,22 @@ net_read( n, buf, len, tv )
     struct timeval	tv_begin, tv_end;
 #endif linux
     fd_set		fds;
+    int			rc;
     extern int		errno;
 
     if ( tv ) {
 	FD_ZERO( &fds );
-	FD_SET( net_fd( n ), &fds );
+	FD_SET( snet_fd( sn ), &fds );
 #ifndef linux
 	if ( gettimeofday( &tv_begin, NULL ) < 0 ) {
 	    return( -1 );
 	}
 #endif linux
 	/* time out case? */
-	if ( select( net_fd( n ) + 1, &fds, NULL, NULL, tv ) < 0 ) {
+	if ( select( snet_fd( sn ) + 1, &fds, NULL, NULL, tv ) < 0 ) {
 	    return( -1 );
 	}
-	if ( FD_ISSET( net_fd( n ), &fds ) == 0 ) {
+	if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
 	    errno = ETIMEDOUT;
 	    return( -1 );
 	}
@@ -320,6 +371,8 @@ net_read( n, buf, len, tv )
 #endif linux
     }
 
-    errno = 0;
-    return( read( net_fd( n ), buf, len ));
+    if (( rc = read( snet_fd( sn ), buf, len )) == 0 ) {
+	sn->sn_eof = 1;
+    }
+    return( rc );
 }
