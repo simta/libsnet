@@ -34,9 +34,7 @@
 #define SNET_IN		2
 
 #define SNET_EOF	(1<<0)
-#define SNET_ENCRYPT	(1<<1)
 
-static int snet_saslread ___P(( SNET *, char *, int, struct timeval * ));
 static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
 
 /*
@@ -79,15 +77,6 @@ snet_attach( fd, max )
 
     sn->sn_flag = 0;
 
-    sn->sn_encrypt = NULL;
-    sn->sn_decrypt = NULL;
-    sn->sn_crypto = NULL;
-    sn->sn_ebuf = NULL;
-    sn->sn_ebuflen = 0;
-    sn->sn_dbuf = NULL;
-    sn->sn_dcur = sn->sn_dend = NULL;
-    sn->sn_dbuflen = 0;
-
     return( sn );
 }
 
@@ -111,10 +100,6 @@ snet_close( sn )
 {
     free( sn->sn_wbuf );
     free( sn->sn_rbuf );
-    if ( sn->sn_crypto ) {
-	free( sn->sn_ebuf );
-	free( sn->sn_dbuf );
-    }
     if ( close( sn->sn_fd ) < 0 ) {
 	return( -1 );
     }
@@ -248,37 +233,6 @@ snet_writef( sn, format, va_alist )
 }
 
 /*
- * Enable SASL.  Should we check that esize and dsize are > 0?
- */
-    int
-snet_sasl( sn, crypto, encrypt, decrypt, esize, dsize )
-    SNET		*sn;
-    void		*crypto;
-    int			(*encrypt)( void *, char *, int );
-    int			(*decrypt)( void *, char *, int );
-    unsigned int	esize, dsize;
-{
-    sn->sn_crypto = crypto;
-    sn->sn_encrypt = encrypt;
-    sn->sn_decrypt = decrypt;
-
-    if (( sn->sn_ebuf = (char *)malloc( esize + 4 )) == NULL ) {
-	return( -1 );
-    }
-    sn->sn_ebuflen = esize;
-
-    if (( sn->sn_dbuf = (char *)malloc( dsize + 4 )) == NULL ) {
-	free( sn->sn_ebuf );
-	return( -1 );
-    }
-    sn->sn_dbuflen = dsize;
-    sn->sn_dend = sn->sn_dbuf;
-    sn->sn_dcur = NULL;
-
-    return( 0 );
-}
-
-/*
  * Should we set non-blocking IO?  Do we need to bother?
  * We'll leave tv in here now, so that we don't have to change the call
  * later.  It's currently ignored.
@@ -290,87 +244,7 @@ snet_write( sn, buf, len, tv )
     int			len;
     struct timeval	*tv;
 {
-
-    if ( sn->sn_crypto == NULL ) {
-	return( write( snet_fd( sn ), buf, len ));
-    }
-
-    abort();
-}
-
-    static int
-snet_saslread( sn, buf, len, tv )
-    SNET		*sn;
-    char		*buf;
-    int			len;
-    struct timeval	*tv;
-{
-    uint32_t		maxrbuf;
-    int			rc;
-    extern int		errno;
-
-    if ( sn->sn_crypto == NULL ) {
-	return( snet_readread( sn, buf, len, tv ));
-    }
-
-    /*
-     * we already have decrypted data
-     */
-    if ( sn->sn_dcur != NULL ) {
-	maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
-	goto gotsum;
-    }
-
-    /* if we already have encrypted data (or no data), read some more */
-    for (;;) {
-	if ( sn->sn_dend - sn->sn_dbuf < 4 ) {
-	    maxrbuf = sn->sn_dbuflen + 4;
-	    maxrbuf -= ( sn->sn_dend - sn->sn_dbuf );
-	} else {
-	    maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
-	    if ( maxrbuf > sn->sn_dbuflen ) {
-		errno = EINVAL;				/* losers... */
-		return( -1 );
-	    }
-
-	    /* check for full buffer */
-	    if (( maxrbuf -= ( sn->sn_dend - ( sn->sn_dbuf + 4 ))) <= 0 ) {
-		break;
-	    }
-	}
-
-	if (( rc = snet_readread( sn, sn->sn_dend, maxrbuf, tv )) <= 0 ) {
-	    return( rc );
-	}
-	sn->sn_dend += rc;
-    }
-
-    /*
-     * we have a full encrypted buffer: decrypt it, save state,
-     * and return some
-     */
-    sn->sn_dcur = sn->sn_dbuf + 4;
-    maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
-    (*sn->sn_decrypt)( sn->sn_crypto, sn->sn_dcur, maxrbuf );
-
-gotsum:
-#define min(x,y)	(((x)<(y))?(x):(y))
-    maxrbuf -= ( sn->sn_dcur - ( sn->sn_dbuf + 4 ));
-    rc = min( len, maxrbuf );
-    memcpy( buf, sn->sn_dcur, rc );
-    sn->sn_dcur += rc;
-
-    /* did we exhaust the decrypted data? */
-    if ( rc == maxrbuf ) {
-	if ( sn->sn_dcur < sn->sn_dend ) { /* anything past decrypted data? */
-	    memcpy( sn->sn_dbuf, sn->sn_dcur, sn->sn_dend - sn->sn_dcur );
-	    sn->sn_dend = sn->sn_dbuf + ( sn->sn_dend - sn->sn_dcur );
-	} else {
-	    sn->sn_dend = sn->sn_dbuf;
-	}
-	sn->sn_dcur = NULL;
-    }
-    return( rc );
+    return( write( snet_fd( sn ), buf, len ));
 }
 
     static int
@@ -445,7 +319,7 @@ snet_read( sn, buf, len, tv )
     /*
      * If there's data already buffered, make sure it's not left over
      * from snet_getline(), and then return whatever's left.
-     * XXX Note that snet_getline() calls snet_saslread().
+     * Note that snet_getline() calls snet_readread().
      */
     if ( sn->sn_rcur < sn->sn_rend ) {
 	if (( *sn->sn_rcur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
@@ -453,6 +327,9 @@ snet_read( sn, buf, len, tv )
 	    sn->sn_rcur++;
 	}
 	if ( sn->sn_rcur < sn->sn_rend ) {
+#ifndef min
+#define min(a,b)	(((a)<(b))?(a):(b))
+#endif min
 	    rc = min( sn->sn_rend - sn->sn_rcur, len );
 	    memcpy( buf, sn->sn_rcur, rc );
 	    sn->sn_rcur += rc;
@@ -460,7 +337,7 @@ snet_read( sn, buf, len, tv )
 	}
     }
 
-    return( snet_saslread( sn, buf, len, tv ));
+    return( snet_readread( sn, buf, len, tv ));
 }
 
 /*
@@ -504,7 +381,7 @@ snet_getline( sn, tv )
 		sn->sn_rcur = sn->sn_rbuf;
 	    }
 
-	    if (( rc = snet_saslread( sn, sn->sn_rend,
+	    if (( rc = snet_readread( sn, sn->sn_rend,
 		    sn->sn_rbuflen - ( sn->sn_rend - sn->sn_rbuf ),
 		    tv )) < 0 ) {
 		return( NULL );

@@ -20,15 +20,6 @@ typedef struct {
     char	*sn_wbuf;
     int		sn_wbuflen;
     int		sn_flag;
-    int		(*sn_encrypt) ___P(( void *, char *, int ));
-    int		(*sn_decrypt) ___P(( void *, char *, int ));
-    void	*sn_crypto;
-    char	*sn_ebuf;
-    int		sn_ebuflen;
-    char	*sn_dbuf;
-    int		sn_dbuflen;
-    char	*sn_dend;
-    char	*sn_dcur;
 } SNET;
 
 #define snet_fd( sn )	((sn)->sn_fd)
@@ -43,7 +34,3 @@ char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 		struct timeval * ));
 int	snet_read ___P(( SNET *, char *, int, struct timeval * ));
 int	snet_write ___P(( SNET *, char *, int, struct timeval * ));
-int	snet_sasl ___P(( SNET *, void *,
-		int (*) ___P(( void *, char *, int )),
-		int (*) ___P(( void *, char *, int )),
-		unsigned int, unsigned int ));
