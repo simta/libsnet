@@ -39,7 +39,7 @@
 #define SNET_EOF	(1<<0)
 #define SNET_TLS	(1<<1)
 
-static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
+static ssize_t snet_readread ___P(( SNET *, char *, size_t, struct timeval * ));
 
 /*
  * This routine is necessary, since snet_getline() doesn't differentiate
@@ -152,7 +152,7 @@ snet_starttls( sn, sslctx, sslaccept )
  *
  * Todo: %f, *, . and, -
  */
-    int
+    ssize_t
 #ifdef __STDC__
 snet_writef( SNET *sn, char *format, ... )
 #else /* __STDC__ */
@@ -277,11 +277,11 @@ snet_writef( sn, format, va_alist )
  * We'll leave tv in here now, so that we don't have to change the call
  * later.  It's currently ignored.
  */
-    int
+    ssize_t
 snet_write( sn, buf, len, tv )
     SNET		*sn;
     char		*buf;
-    int			len;
+    size_t		len;
     struct timeval	*tv;
 {
     if ( sn->sn_flag & SNET_TLS ) {
@@ -295,18 +295,18 @@ snet_write( sn, buf, len, tv )
     }
 }
 
-    static int
+    static ssize_t
 snet_readread( sn, buf, len, tv )
     SNET		*sn;
     char		*buf;
-    int			len;
+    size_t		len;
     struct timeval	*tv;
 {
 #ifndef linux
     struct timeval	tv_begin, tv_end;
 #endif /* linux */
     fd_set		fds;
-    int			rc;
+    ssize_t		rc;
     extern int		errno;
 
     if ( tv ) {
@@ -365,14 +365,14 @@ snet_readread( sn, buf, len, tv )
  * External entry point for reading with the snet library.  Compatible
  * with snet_getline()'s buffering.
  */
-    int
+    ssize_t
 snet_read( sn, buf, len, tv )
     SNET		*sn;
     char		*buf;
-    int			len;
+    size_t		len;
     struct timeval	*tv;
 {
-    int			rc;
+    ssize_t		rc;
 
     /*
      * If there's data already buffered, make sure it's not left over
@@ -409,7 +409,7 @@ snet_getline( sn, tv )
     struct timeval	*tv;
 {
     char		*eol, *line;
-    int			rc;
+    ssize_t		rc;
     extern int		errno;
 
     for ( eol = sn->sn_rcur; ; eol++) {
