@@ -3,6 +3,8 @@
  * All Rights Reserved.  See COPYRIGHT.
  */
 
+#include "config.h"
+
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/time.h>
@@ -18,9 +20,9 @@
 
 #include <netinet/in.h>
 
-#ifdef TLS
+#ifdef HAVE_LIBSSL
 #include <openssl/ssl.h>
-#endif /* TLS */
+#endif /* HAVE_LIBSSL */
 
 #ifdef __STDC__
 #include <stdarg.h>
@@ -114,7 +116,7 @@ snet_close( sn )
     return( 0 );
 }
 
-#ifdef TLS
+#ifdef HAVE_LIBSSL
 /*
  * Returns 0 on success, and all further communication is through
  * the OpenSSL layer.  Returns -1 on failure, check the OpenSSL error
@@ -144,7 +146,7 @@ snet_starttls( sn, sslctx, sslaccept )
     }
     return( rc );
 }
-#endif /* TLS */
+#endif /* HAVE_LIBSSL */
 
 /*
  * Just like fprintf, only use the SNET header to get the fd, and use
@@ -402,11 +404,11 @@ snet_write( sn, buf, len, tv )
     struct timeval	*tv;
 {
     if ( sn->sn_flag & SNET_TLS ) {
-#ifdef TLS
+#ifdef HAVE_LIBSSL
 	return( SSL_write( sn->sn_ssl, buf, len ));
 #else
 	return( -1 );
-#endif /* TLS */
+#endif /* HAVE_LIBSSL */
     } else {
 	return( write( snet_fd( sn ), buf, len ));
     }
@@ -463,11 +465,11 @@ snet_readread( sn, buf, len, tv )
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
-#ifdef TLS
+#ifdef HAVE_LIBSSL
 	rc = SSL_read( sn->sn_ssl, buf, len );
-#else /* TLS */
+#else /* HAVE_LIBSSL */
 	rc = -1;
-#endif /* TLS */
+#endif /* HAVE_LIBSSL */
     } else {
 	rc = read( snet_fd( sn ), buf, len );
     }

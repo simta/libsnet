@@ -14,3 +14,5 @@
           ac_cv_sys_file_offset_bits=64 ;;
         esac */     
 #undef _FILE_OFFSET_BITS
+
+#undef HAVE_LIBSSL

@@ -20,9 +20,9 @@ typedef struct {
     char	*sn_wbuf;
     int		sn_wbuflen;
     int		sn_flag;
-#ifdef TLS
+#ifdef HAVE_LIBSSL
     void	*sn_ssl;
-#endif /* TLS */
+#endif /* HAVE_LIBSSL */
 } SNET;
 
 #define snet_fd( sn )	((sn)->sn_fd)
@@ -38,6 +38,6 @@ char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 int	snet_hasdata ___P(( SNET * ));
 ssize_t	snet_read ___P(( SNET *, char *, size_t, struct timeval * ));
 ssize_t	snet_write ___P(( SNET *, char *, size_t, struct timeval * ));
-#ifdef TLS
+#ifdef HAVE_LIBSSL
 int	snet_starttls ___P(( SNET *, SSL_CTX *, int ));
-#endif /* TLS */
+#endif /* HAVE_LIBSSL */

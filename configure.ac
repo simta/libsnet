@@ -11,10 +11,8 @@ AC_PROG_CC
 AC_PROG_INSTALL
 
 # Checks for libraries.
-#AC_CHECK_LIB([nsl], [inet_ntoa])
-#AC_CHECK_LIB([socket], [socket])
-
-CHECK_SSL
+AC_CHECK_LIB([ssl], [SSL_accept], , [CHECK_SSL])
+AC_CHECK_LIB([crypto], [SSLeay_version], , [CHECK_SSL])
 
 # Checks for header files.
 #AC_HEADER_STDC
