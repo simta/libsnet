@@ -1,0 +1,22 @@
+SSL_CTX_set_verify
+SSL_CTX_use_certificate_file
+SSL_CTX_use_PrivateKey_file
+
+Client:
+SSL_CTX_load_verify_locations
+
+Server:
+SSL_load_client_CA_file
+SSL_CTX_set_client_CA_list
+
+
+        SSL_CTX *ctx;
+        STACK_OF(X509_NAME) *cert_names;
+
+        ...
+        cert_names = SSL_load_client_CA_file("/path/to/CAfile.pem");
+        if (cert_names != NULL)
+          SSL_CTX_set_client_CA_list(ctx, cert_names);
+        else
+          error_handling();
+        ...
