@@ -2,9 +2,10 @@ SRC = net.c
 OBJ = net.o
 
 INCPATH=
+OPTOPTS=	-Wall -Wstrict-prototypes
 CFLAGS=	${DEFS} ${OPTOPTS} ${INCPATH}
 TAGSFILE=	tags
-CC=	cc
+CC=	gcc
 
 all : libnet.a
 
