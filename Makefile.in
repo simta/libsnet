@@ -11,7 +11,7 @@ SRC  = snet.c
 OBJ  = snet.o
 LOBJ = snet.lo
 
-INCPATH=	@CPPFLAGS@
+INCPATH=	@CPPFLAGS@ -I.
 DEFS=		
 OPTOPTS=	@OPTOPTS@
 CFLAGS=		${DEFS} ${OPTOPTS} ${INCPATH}
