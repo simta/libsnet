@@ -444,6 +444,14 @@ snet_getline( sn, tv )
 		return( NULL );
 	    }
 	    if ( rc == 0 ) {	/* EOF */
+		/*
+		 * When we did the read, we made sure we had space to
+		 * read, so when we place the '\0' below, we have space
+		 * for that.
+		 */
+		if ( sn->sn_rcur < sn->sn_rend ) {
+		    break;
+		}
 		return( NULL );
 	    }
 	    sn->sn_rend += rc;
