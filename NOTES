@@ -51,3 +51,39 @@ SSL_CTX_set_client_CA_list
         else
           error_handling();
         ...
+
+To keep configure from unnecessarily checking for CPP, egrep, STD C headers,
+and 9 additional headers, the following change has been made to libtool.m4:
+
+--- libtool.m4.orig     2002-11-08 09:54:02.000002000 -0500
++++ libtool.m4  2002-11-08 09:54:30.000009000 -0500
+@@ -175,7 +175,7 @@
+ # _LT_AC_CHECK_DLFCN
+ # --------------------
+ AC_DEFUN([_LT_AC_CHECK_DLFCN],
+-[AC_CHECK_HEADERS(dlfcn.h)
++[AC_CHECK_HEADERS(dlfcn.h,[AC_DEFINE(HAVE_DLFCN_H)],[],[ ])
+ ])# _LT_AC_CHECK_DLFCN
+ 
+ # AC_LIBTOOL_SYS_GLOBAL_SYMBOL_PIPE
+
+
+Change to ltmain.sh to prevent spewing of unwanted messages:
+
+--- ltmain.sh.orig      2002-11-08 13:16:12.000002000 -0500
++++ ltmain.sh   2002-11-08 13:17:30.000004000 -0500
+@@ -4481,7 +4481,11 @@
+     if test -n "$current_libdirs"; then
+       # Maybe just do a dry run.
+       test -n "$run" && current_libdirs=" -n$current_libdirs"
+-      exec_cmd='$SHELL $0 --finish$current_libdirs'
++      if test $show = ':'; then
++        exec_cmd='$SHELL $0 --silent --finish$current_libdirs'
++      else
++        exec_cmd='$SHELL $0 --finish$current_libdirs'
++      fi
+     else
+       exit 0
+     fi
+
+
