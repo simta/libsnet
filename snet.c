@@ -20,13 +20,13 @@
 
 #ifdef TLS
 #include <openssl/ssl.h>
-#endif TLS
+#endif /* TLS */
 
 #ifdef __STDC__
 #include <stdarg.h>
-#else __STDC__
+#else /* __STDC__ */
 #include <varargs.h>
-#endif __STDC__
+#endif /* __STDC__ */
 
 #include "snet.h"
 
@@ -141,7 +141,7 @@ snet_starttls( sn, sslctx, sslaccept )
     }
     return( rc );
 }
-#endif TLS
+#endif /* TLS */
 
 /*
  * Just like fprintf, only use the SNET header to get the fd, and use
@@ -152,12 +152,12 @@ snet_starttls( sn, sslctx, sslaccept )
     int
 #ifdef __STDC__
 snet_writef( SNET *sn, char *format, ... )
-#else __STDC__
+#else /* __STDC__ */
 snet_writef( sn, format, va_alist )
     SNET			*sn;
     char		*format;
     va_dcl
-#endif __STDC__
+#endif /* __STDC__ */
 {
     va_list		vl;
     char		dbuf[ 128 ], *p, *dbufoff;
@@ -166,9 +166,9 @@ snet_writef( sn, format, va_alist )
 
 #ifdef __STDC__
     va_start( vl, format );
-#else __STDC__
+#else /* __STDC__ */
     va_start( vl );
-#endif __STDC__
+#endif /* __STDC__ */
 
 #define SNET_WRITEFGROW(x)						\
 	    while ( cur + (x) > end ) {					\
@@ -285,7 +285,7 @@ snet_write( sn, buf, len, tv )
 	return( SSL_write( sn->sn_ssl, buf, len ));
 #else
 	return( -1 );
-#endif TLS
+#endif /* TLS */
     } else {
 	return( write( snet_fd( sn ), buf, len ));
     }
@@ -300,7 +300,7 @@ snet_readread( sn, buf, len, tv )
 {
 #ifndef linux
     struct timeval	tv_begin, tv_end;
-#endif linux
+#endif /* linux */
     fd_set		fds;
     int			rc;
     extern int		errno;
@@ -312,7 +312,7 @@ snet_readread( sn, buf, len, tv )
 	if ( gettimeofday( &tv_begin, NULL ) < 0 ) {
 	    return( -1 );
 	}
-#endif linux
+#endif /* linux */
 	/* time out case? */
 	if ( select( snet_fd( sn ) + 1, &fds, NULL, NULL, tv ) < 0 ) {
 	    return( -1 );
@@ -338,15 +338,15 @@ snet_readread( sn, buf, len, tv )
 	    errno = ETIMEDOUT;
 	    return( -1 );
 	}
-#endif linux
+#endif /* linux */
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
 #ifdef TLS
 	rc = SSL_read( sn->sn_ssl, buf, len );
-#else TLS
+#else /* TLS */
 	rc = -1;
-#endif TLS
+#endif /* TLS */
     } else {
 	rc = read( snet_fd( sn ), buf, len );
     }
@@ -383,7 +383,7 @@ snet_read( sn, buf, len, tv )
 	if ( sn->sn_rcur < sn->sn_rend ) {
 #ifndef min
 #define min(a,b)	(((a)<(b))?(a):(b))
-#endif min
+#endif /* min */
 	    rc = min( sn->sn_rend - sn->sn_rcur, len );
 	    memcpy( buf, sn->sn_rcur, rc );
 	    sn->sn_rcur += rc;
