@@ -4,13 +4,13 @@
  */
 
 #include <sys/types.h>
-#include <sys/time.h>
 #include <sys/uio.h>
-
-#include <stdio.h>
+#include <sys/time.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <strings.h>
-#include <string.h>
 #include <stdlib.h>
 
 #ifdef __STDC__
@@ -18,10 +18,6 @@
 #else __STDC__
 #include <varargs.h>
 #endif __STDC__
-#include <syslog.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <errno.h>
 
 #include "net.h"
 
@@ -32,6 +28,12 @@
 #define NET_FUZZY	1
 #define NET_IN		2
 
+#ifdef notdef
+/*
+ * This routine is necessary, since net_getline() doesn't differenciate
+ * between NULL => EOF and NULL => connection dropped (or some other error).
+ * However, no code currently exists that uses it, so...
+ */
     char *
 net_error( n )
     NET		*n;
@@ -47,6 +49,7 @@ net_error( n )
     }
     return( NULL );
 }
+#endif notdef
 
     NET *
 net_attach( fd, max )
@@ -163,7 +166,6 @@ net_writef( n, format, va_alist )
 		p = dbufoff;
 		while ( d ) {
 		    if ( --dbufoff < dbuf ) {
-			syslog( LOG_ERR, "net_writef: ran out of %%d room!" );
 			abort();
 		    }
 		    *dbufoff = '0' + ( d % 10 );
@@ -216,7 +218,8 @@ net_getline( n, tv )
 	    /* pullup */
 	    if ( n->nh_cur > n->nh_buf ) {
 		if ( n->nh_cur < n->nh_end ) {
-		    bcopy( n->nh_cur, n->nh_buf, n->nh_end - n->nh_cur );
+		    memcpy( n->nh_buf, n->nh_cur,
+			    (unsigned)( n->nh_end - n->nh_cur ));
 		}
 		eol = n->nh_end = n->nh_buf + ( n->nh_end - n->nh_cur );
 		n->nh_cur = n->nh_buf;
@@ -294,7 +297,7 @@ net_read( n, buf, len, tv )
 	    return( -1 );
 	}
 	if ( FD_ISSET( net_fd( n ), &fds ) == 0 ) {
-	    errno = ETIME;
+	    errno = ETIMEDOUT;
 	    return( -1 );
 	}
 #ifndef linux
@@ -311,7 +314,7 @@ net_read( n, buf, len, tv )
 	    tv->tv_sec -= 1;
 	}
 	if (( tv->tv_sec -= ( tv_end.tv_sec - tv_begin.tv_sec )) < 0 ) {
-	    errno = ETIME;
+	    errno = ETIMEDOUT;
 	    return( -1 );
 	}
 #endif linux
