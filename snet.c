@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995,1997 Regents of The University of Michigan.
+ * Copyright (c) 1995,2000 Regents of The University of Michigan.
  * All Rights Reserved.  See COPYRIGHT.
  */
 
@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
 
 #ifdef __STDC__
 #include <stdarg.h>
@@ -23,11 +24,12 @@
 #include "snet.h"
 
 #define SNET_BUFLEN	1024
-#define SNET_IOVCNT	128
 
 #define SNET_BOL	0
 #define SNET_FUZZY	1
 #define SNET_IN		2
+
+static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
 
 /*
  * Need SASL entry points.
@@ -58,14 +60,22 @@ snet_attach( fd, max )
 	return( NULL );
     }
     sn->sn_fd = fd;
-    if (( sn->sn_buf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
+    if (( sn->sn_rbuf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
 	free( sn );
 	return( NULL );
     }
-    sn->sn_cur = sn->sn_end = sn->sn_buf;
-    sn->sn_buflen = SNET_BUFLEN;
+    sn->sn_rbuflen = SNET_BUFLEN;
+    sn->sn_rstate = SNET_BOL;
+    sn->sn_cur = sn->sn_end = sn->sn_rbuf;
     sn->sn_maxlen = max;
-    sn->sn_state = SNET_BOL;
+
+    if (( sn->sn_wbuf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
+	free( sn->sn_rbuf );
+	free( sn );
+	return( NULL );
+    }
+    sn->sn_wbuflen = SNET_BUFLEN;
+
     sn->sn_eof = 0;
     return( sn );
 }
@@ -88,7 +98,8 @@ snet_open( path, flags, mode, max )
 snet_close( sn )
     SNET		*sn;
 {
-    free( sn->sn_buf );
+    free( sn->sn_wbuf );
+    free( sn->sn_rbuf );
     if ( close( sn->sn_fd ) < 0 ) {
 	return( -1 );
     }
@@ -98,10 +109,9 @@ snet_close( sn )
 
 /*
  * Just like fprintf, only use the SNET header to get the fd, and use
- * writev() to move the data.
+ * snet_write() to move the data.
  *
  * Todo: %f, *, . and, -
- * should handle aribtrarily large output
  */
     int
 #ifdef __STDC__
@@ -113,11 +123,10 @@ snet_writef( sn, format, va_alist )
     va_dcl
 #endif __STDC__
 {
-    static struct iovec	*iov = NULL;
-    static int		iovcnt = 0;
     va_list		vl;
-    char		dbuf[ 1024 ], *p, *dbufoff = dbuf + sizeof( dbuf );
-    int			i, state, d;
+    char		dbuf[ 128 ], *p, *dbufoff;
+    int			d, len;
+    char		*cur, *end;
 
 #ifdef __STDC__
     va_start( vl, format );
@@ -125,45 +134,39 @@ snet_writef( sn, format, va_alist )
     va_start( vl );
 #endif __STDC__
 
-    for ( state = SNET_BOL, i = 0; *format; format++ ) {
-	/*
-	 * Make sure there's room for stuff
-	 */
-	if ( i == iovcnt ) {
-	    if ( iov == NULL ) {
-		if (( iov = (struct iovec *)
-			malloc( sizeof( struct iovec ) * SNET_IOVCNT ))
-			== NULL ) {
-		    return( -1 );
-		}
-		iovcnt = SNET_IOVCNT;
-	    } else {
-		abort();	/* realloc */
-	    }
-	}
+#define SNET_WRITEFGROW(x)					\
+    while ( cur + (x) > end ) {					\
+	if (( sn->sn_wbuf = (char *)realloc( sn->sn_wbuf,	\
+		sn->sn_wbuflen + SNET_BUFLEN )) == NULL ) {	\
+	    abort();						\
+	}							\
+	cur = sn->sn_wbuf + sn->sn_wbuflen - ( end - cur );	\
+	sn->sn_wbuflen += SNET_BUFLEN;				\
+	end = sn->sn_wbuf + sn->sn_wbuflen;			\
+    }		
 
-	if ( *format == '%' ) {
-	    if ( state == SNET_IN ) {
-		iov[ i ].iov_len = format - (char *)iov[ i ].iov_base;
-		state = SNET_BOL;
-		i++;
-	    }
+    cur = sn->sn_wbuf;
+    end = sn->sn_wbuf + sn->sn_wbuflen;
 
+    for ( ; *format; format++ ) {
+	dbufoff = dbuf + sizeof( dbuf );
+
+	if ( *format != '%' ) {
+	    SNET_WRITEFGROW( 1 );
+	    *cur++ = *format;
+	} else {
 	    switch ( *++format ) {
 	    case 's' :
-		iov[ i ].iov_base = va_arg( vl, char * );
-		iov[ i ].iov_len = strlen( iov[ i ].iov_base );
-		i++;
+		p = va_arg( vl, char * );
+		len = strlen( p );
+		SNET_WRITEFGROW( len );
+		strcpy( cur, p );
+		cur += strlen( p );
 		break;
 
 	    case 'c' :
-		if ( --dbufoff < dbuf ) {
-		    abort();
-		}
-		*dbufoff = va_arg( vl, char );
-		iov[ i ].iov_base = dbufoff;
-		iov[ i ].iov_len = 1;
-		i++;
+		SNET_WRITEFGROW( 1 );
+		*cur++ = va_arg( vl, char );
 		break;
 
 	    case 'd' :
@@ -176,9 +179,10 @@ snet_writef( sn, format, va_alist )
 		    *dbufoff = '0' + ( d % 10 );
 		    d /= 10;
 		} while ( d );
-		iov[ i ].iov_base = dbufoff;
-		iov[ i ].iov_len = p - dbufoff;
-		i++;
+		len = p - dbufoff;
+		SNET_WRITEFGROW( len );
+		strncpy( cur, dbufoff, len );
+		cur += len;
 		break;
 
 	    case 'o' :
@@ -191,9 +195,10 @@ snet_writef( sn, format, va_alist )
 		    *dbufoff = '0' + ( d & 0007 );
 		    d = d >> 3;
 		} while ( d );
-		iov[ i ].iov_base = dbufoff;
-		iov[ i ].iov_len = p - dbufoff;
-		i++;
+		len = p - dbufoff;
+		SNET_WRITEFGROW( len );
+		strncpy( cur, dbufoff, len );
+		cur += len;
 		break;
 
 	    case 'x' :
@@ -208,147 +213,41 @@ snet_writef( sn, format, va_alist )
 		    *dbufoff = hexalpha[ d & 0x0f ];
 		    d = d >> 4;
 		} while ( d );
-		iov[ i ].iov_base = dbufoff;
-		iov[ i ].iov_len = p - dbufoff;
-		i++;
+		SNET_WRITEFGROW( len );
+		strncpy( cur, dbufoff, len );
+		cur += len;
 		break;
 
 	    default :
-		iov[ i ].iov_base = format;
-		state = SNET_IN;
+		SNET_WRITEFGROW( 1 );
+		*cur++ = *format;
 		break;
-
-	    }
-	} else {
-	    if ( state == SNET_BOL ) {
-		iov[ i ].iov_base = format;
-		state = SNET_IN;
 	    }
 	}
-    }
-    if ( state == SNET_IN ) {
-	iov[ i ].iov_len = format - (char *)iov[ i ].iov_base;
-	i++;
     }
 
     va_end( vl );
 
-    return ( writev( snet_fd( sn ), iov, i ));
+    return( snet_write( sn, sn->sn_wbuf, cur - sn->sn_wbuf, 0 ));
 }
 
 /*
- * Get a null-terminated line of input, handle CR/LF issues.
- * Note that snet_getline() returns information from a common area which
- * may be overwritten by subsequent calls.
+ * Set non-blocking IO?  Do we need to bother?
+ * We'll leave tv in here now, so that we don't have to change the call
+ * later.  It's currently ignored.
  */
-    char *
-snet_getline( sn, tv )
-    SNET		*sn;
-    struct timeval	*tv;
-{
-    char		*eol, *line;
-    int			rc;
-    extern int		errno;
-
-    for ( eol = sn->sn_cur; ; eol++) {
-	if ( eol >= sn->sn_end ) {				/* fill */
-	    /* pullup */
-	    if ( sn->sn_cur > sn->sn_buf ) {
-		if ( sn->sn_cur < sn->sn_end ) {
-		    memcpy( sn->sn_buf, sn->sn_cur,
-			    (unsigned)( sn->sn_end - sn->sn_cur ));
-		}
-		eol = sn->sn_end = sn->sn_buf + ( sn->sn_end - sn->sn_cur );
-		sn->sn_cur = sn->sn_buf;
-	    }
-
-	    /* expand */
-	    if ( sn->sn_end == sn->sn_buf + sn->sn_buflen ) {
-		if ( sn->sn_maxlen != 0 && sn->sn_buflen >= sn->sn_maxlen ) {
-		    errno = ENOMEM;
-		    return( NULL );
-		}
-		if (( sn->sn_buf = (char *)realloc( sn->sn_buf,
-			sn->sn_buflen + SNET_BUFLEN )) == NULL ) {
-		    exit( 1 );
-		}
-		sn->sn_buflen += SNET_BUFLEN;
-		eol = sn->sn_end = sn->sn_buf + ( sn->sn_end - sn->sn_cur );
-		sn->sn_cur = sn->sn_buf;
-	    }
-
-	    if (( rc = snet_read( sn, sn->sn_end,
-		    sn->sn_buflen - ( sn->sn_end - sn->sn_buf ), tv )) < 0 ) {
-		return( NULL );
-	    }
-	    if ( rc == 0 ) {	/* EOF */
-		return( NULL );
-	    }
-	    sn->sn_end += rc;
-	}
-
-	if ( *eol == '\r' || *eol == '\0' ) {
-	    sn->sn_state = SNET_FUZZY;
-	    break;
-	}
-	if ( *eol == '\n' ) {
-	    if ( sn->sn_state == SNET_FUZZY ) {
-		sn->sn_state = SNET_BOL;
-		sn->sn_cur = eol + 1;
-		continue;
-	    }
-	    sn->sn_state = SNET_BOL;
-	    break;
-	}
-	sn->sn_state = SNET_IN;
-    }
-
-    *eol = '\0';
-    line = sn->sn_cur;
-    sn->sn_cur = eol + 1;
-    return( line );
-}
-
-    char * 
-snet_getline_multi( sn, logger, tv )
-    SNET		*sn;
-    void		(*logger)( char * );
-    struct timeval	*tv;
-{
-    char		*line; 
-
-    do {
-	if (( line = snet_getline( sn, tv )) == NULL ) {
-	    return ( NULL );
-	}
-
-	if ( logger != NULL ) {
-	    (*logger)( line );
-	}
-
-	if ( strlen( line ) < 3 ) {
-	    return( NULL );
-	}
-
-	if ( !isdigit( (int)line[ 0 ] ) ||
-		!isdigit( (int)line[ 1 ] ) ||
-		!isdigit( (int)line[ 2 ] )) {
-	    return( NULL );
-	}
-
-	if ( line[ 3 ] != '\0' &&
-		line[ 3 ] != ' ' &&
-		line [ 3 ] != '-' ) {
-	    return ( NULL );
-	}
-
-    } while ( line[ 3 ] == '-' );
-
-    return( line );
-}
-
     int
-snet_read( sn, buf, len, tv )
+snet_write( sn, buf, len, tv )
+    SNET		*sn;
+    char		*buf;
+    int			len;
+    struct timeval	*tv;
+{
+    return( write( snet_fd( sn ), buf, len ));
+}
+
+    static int
+snet_readread( sn, buf, len, tv )
     SNET		*sn;
     char		*buf;
     int			len;
@@ -401,4 +300,149 @@ snet_read( sn, buf, len, tv )
 	sn->sn_eof = 1;
     }
     return( rc );
+}
+
+/*
+ * External entry point for reading with the snet library.  Compatible
+ * with snet_getline()'s buffering.
+ */
+    int
+snet_read( sn, buf, len, tv )
+    SNET		*sn;
+    char		*buf;
+    int			len;
+    struct timeval	*tv;
+{
+    int			rc;
+
+    /*
+     * If there's data already buffered, make sure it's not left over
+     * from snet_getline(), and then return whatever's left.
+     * XXX Note that snet_getline() calls snet_read().
+     */
+    if ( sn->sn_cur < sn->sn_end ) {
+	if (( *sn->sn_cur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
+	    sn->sn_rstate = SNET_BOL;
+	    sn->sn_cur++;
+	}
+	if ( sn->sn_cur < sn->sn_end ) {
+	    rc = sn->sn_end - sn->sn_cur;
+	    memcpy( buf, sn->sn_cur, rc );
+	    sn->sn_cur = sn->sn_end = sn->sn_rbuf;
+	    return( rc );
+	}
+    }
+
+    return( snet_readread( sn, buf, len, tv ));
+}
+
+/*
+ * Get a null-terminated line of input, handle CR/LF issues.
+ * Note that snet_getline() returns information from a common area which
+ * may be overwritten by subsequent calls.
+ */
+    char *
+snet_getline( sn, tv )
+    SNET		*sn;
+    struct timeval	*tv;
+{
+    char		*eol, *line;
+    int			rc;
+    extern int		errno;
+
+    for ( eol = sn->sn_cur; ; eol++) {
+	if ( eol >= sn->sn_end ) {				/* fill */
+	    /* pullup */
+	    if ( sn->sn_cur > sn->sn_rbuf ) {
+		if ( sn->sn_cur < sn->sn_end ) {
+		    memcpy( sn->sn_rbuf, sn->sn_cur,
+			    (unsigned)( sn->sn_end - sn->sn_cur ));
+		}
+		eol = sn->sn_end = sn->sn_rbuf + ( sn->sn_end - sn->sn_cur );
+		sn->sn_cur = sn->sn_rbuf;
+	    }
+
+	    /* expand */
+	    if ( sn->sn_end == sn->sn_rbuf + sn->sn_rbuflen ) {
+		if ( sn->sn_maxlen != 0 && sn->sn_rbuflen >= sn->sn_maxlen ) {
+		    errno = ENOMEM;
+		    return( NULL );
+		}
+		if (( sn->sn_rbuf = (char *)realloc( sn->sn_rbuf,
+			sn->sn_rbuflen + SNET_BUFLEN )) == NULL ) {
+		    exit( 1 );
+		}
+		sn->sn_rbuflen += SNET_BUFLEN;
+		eol = sn->sn_end = sn->sn_rbuf + ( sn->sn_end - sn->sn_cur );
+		sn->sn_cur = sn->sn_rbuf;
+	    }
+
+	    if (( rc = snet_readread( sn, sn->sn_end,
+		    sn->sn_rbuflen - ( sn->sn_end - sn->sn_rbuf ), tv )) < 0 ) {
+		return( NULL );
+	    }
+	    if ( rc == 0 ) {	/* EOF */
+		return( NULL );
+	    }
+	    sn->sn_end += rc;
+	}
+
+	if ( *eol == '\r' || *eol == '\0' ) {
+	    sn->sn_rstate = SNET_FUZZY;
+	    break;
+	}
+	if ( *eol == '\n' ) {
+	    if ( sn->sn_rstate == SNET_FUZZY ) {
+		sn->sn_rstate = SNET_BOL;
+		sn->sn_cur = eol + 1;
+		continue;
+	    }
+	    sn->sn_rstate = SNET_BOL;
+	    break;
+	}
+	sn->sn_rstate = SNET_IN;
+    }
+
+    *eol = '\0';
+    line = sn->sn_cur;
+    sn->sn_cur = eol + 1;
+    return( line );
+}
+
+    char * 
+snet_getline_multi( sn, logger, tv )
+    SNET		*sn;
+    void		(*logger)( char * );
+    struct timeval	*tv;
+{
+    char		*line; 
+
+    do {
+	if (( line = snet_getline( sn, tv )) == NULL ) {
+	    return ( NULL );
+	}
+
+	if ( logger != NULL ) {
+	    (*logger)( line );
+	}
+
+	if ( strlen( line ) < 3 ) {
+	    return( NULL );
+	}
+
+	if ( !isdigit( (int)line[ 0 ] ) ||
+		!isdigit( (int)line[ 1 ] ) ||
+		!isdigit( (int)line[ 2 ] )) {
+	    return( NULL );
+	}
+
+	if ( line[ 3 ] != '\0' &&
+		line[ 3 ] != ' ' &&
+		line [ 3 ] != '-' ) {
+	    return ( NULL );
+	}
+
+    } while ( line[ 3 ] == '-' );
+
+    return( line );
 }

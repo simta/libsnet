@@ -5,12 +5,14 @@
 
 typedef struct {
     int		sn_fd;
-    char	*sn_buf;
+    char	*sn_rbuf;
     char	*sn_end;
     char	*sn_cur;
-    int		sn_buflen;
+    int		sn_rbuflen;
     int		sn_maxlen;
-    int		sn_state;
+    int		sn_rstate;
+    char	*sn_wbuf;
+    int		sn_wbuflen;
     int		sn_eof;
 } SNET;
 
@@ -31,3 +33,4 @@ char	*snet_getline ___P(( SNET *, struct timeval * ));
 char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 		struct timeval * ));
 int	snet_read ___P(( SNET *, char *, int, struct timeval * ));
+int	snet_write ___P(( SNET *, char *, int, struct timeval * ));
