@@ -115,33 +115,56 @@ snet_close( sn )
 }
 
 #ifdef TLS
-    int
-snet_inittls( sn, server, devrand )
+    char *
+snet_inittls( sn, server, devrand, cryptofile )
     SNET		*sn;
     int			server;
     int			devrand;
+    char		*cryptofile;
 {
     char		randfile[ MAXPATHLEN ];
+    STACK_OF(X509_NAME)	*certnames;
 
     SSL_load_error_strings();
     SSL_library_init();
     if ( !devrand ) {
 	if ( RAND_file_name( randfile, sizeof( randfile )) == NULL ) {
-	    return( -1 );
+	    return( ERR_error_string( ERR_get_error(), NULL ));
 	}
 	if ( RAND_load_file( randfile, -1 ) <= 0 ) {
-	    return( -1 );
+	    return( ERR_error_string( ERR_get_error(), NULL ));
 	}
 	if ( RAND_write_file( randfile ) < 0 ) {
-	    return( -1 );
+	    return( ERR_error_string( ERR_get_error(), NULL ));
 	}
     }
 
     if (( sn->sn_sslctx = SSL_CTX_new( server ? SSLv23_server_method() :
 	    SSLv23_client_method())) == NULL ) {
-	return( -1 );
+	return( ERR_error_string( ERR_get_error(), NULL ));
     }
-    return( 0 );
+    if ( cryptofile ) {
+	if ( server ) {
+	    if (( certnames = SSL_load_client_CA_file( cryptofile )) == NULL ) {
+		return( "SSL_load_client_CA_file" );
+		return( ERR_error_string( ERR_get_error(), NULL ));
+	    }
+	    SSL_CTX_set_client_CA_list( sn->sn_sslctx, certnames );
+	}
+
+	if ( SSL_CTX_use_PrivateKey_file( sn->sn_sslctx,
+		cryptofile, SSL_FILETYPE_PEM ) != 1 ) {
+	    return( "SSL_CTX_use_PrivateKey_file" );
+	    return( ERR_error_string( ERR_get_error(), NULL ));
+	}
+
+	if ( SSL_CTX_use_certificate_chain_file( sn->sn_sslctx,
+		cryptofile ) != 1 ) {
+	    return( "SSL_CTX_use_certificate_chain_file" );
+	    return( ERR_error_string( ERR_get_error(), NULL ));
+	}
+    }
+    return( NULL );
 }
 
     char *
