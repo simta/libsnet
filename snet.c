@@ -34,6 +34,7 @@
 #define SNET_IN		2
 
 #define SNET_EOF	(1<<0)
+#define SNET_TLS	(1<<1)
 
 static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
 
@@ -244,7 +245,11 @@ snet_write( sn, buf, len, tv )
     int			len;
     struct timeval	*tv;
 {
-    return( write( snet_fd( sn ), buf, len ));
+    if ( sn->sn_flag & SNET_TLS ) {
+	/* ssl_write */
+    } else {
+	return( write( snet_fd( sn ), buf, len ));
+    }
 }
 
     static int
@@ -297,9 +302,14 @@ snet_readread( sn, buf, len, tv )
 #endif linux
     }
 
-    if (( rc = read( snet_fd( sn ), buf, len )) == 0 ) {
-	sn->sn_flag = SNET_EOF;
+    if ( sn->sn_flag & SNET_TLS ) {
+	/* ssl_read( ... ) */
+    } else {
+	if (( rc = read( snet_fd( sn ), buf, len )) == 0 ) {
+	    sn->sn_flag = SNET_EOF;
+	}
     }
+
     return( rc );
 }
 
