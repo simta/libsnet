@@ -3,7 +3,7 @@ OBJ = snet.o
 
 INCPATH=
 OPTOPTS=	-Wall # -Wstrict-prototypes
-CFLAGS=	${DEFS} ${OPTOPTS} ${INCPATH}
+CFLAGS=	${DEFS} ${OPTOPTS} ${INCPATH} -DTLS
 TAGSFILE=	tags
 CC=	gcc
 
