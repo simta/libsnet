@@ -7,11 +7,11 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 
+#include <varargs.h>
 #include <syslog.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <varargs.h>
 
 #include "net.h"
 
