@@ -416,7 +416,7 @@ snet_getline( sn, tv )
 	    /* pullup */
 	    if ( sn->sn_rcur > sn->sn_rbuf ) {
 		if ( sn->sn_rcur < sn->sn_rend ) {
-		    memcpy( sn->sn_rbuf, sn->sn_rcur,
+		    memmove( sn->sn_rbuf, sn->sn_rcur,
 			    (unsigned)( sn->sn_rend - sn->sn_rcur ));
 		}
 		eol = sn->sn_rend = sn->sn_rbuf + ( sn->sn_rend - sn->sn_rcur );
