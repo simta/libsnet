@@ -18,6 +18,10 @@
 
 #include <netinet/in.h>
 
+#ifdef TLS
+#include <openssl/ssl.h>
+#endif TLS
+
 
 #ifdef __STDC__
 #include <stdarg.h>
@@ -107,6 +111,40 @@ snet_close( sn )
     free( sn );
     return( 0 );
 }
+
+#ifdef TLS
+    int
+snet_inittls( sn, server )
+    SNET		*sn;
+    int			server;
+{
+    SSL_library_init();
+
+    if (( sn->sn_sslctx = SSL_CTX_new( server ? SSLv23_server_method() :
+	    SSLv23_client_method())) == NULL ) {
+	return( -1 );
+    }
+    return( 0 );
+}
+
+    int
+snet_starttls( sn, server )
+    SNET		*sn;
+    int			server;
+{
+    if (( sn->sn_ssl = SSL_new( sn->sn_sslctx )) == NULL ) {
+	return( -1 );
+    }
+    if ( SSL_set_fd( sn->sn_ssl, sn->sn_fd ) != 1 ) {
+	return( -1 );
+    }
+    if ( server ) {
+	return( SSL_accept( sn->sn_ssl ));
+    } else {
+	return( SSL_connect( sn->sn_ssl ));
+    }
+}
+#endif TLS
 
 /*
  * Just like fprintf, only use the SNET header to get the fd, and use
@@ -246,7 +284,7 @@ snet_write( sn, buf, len, tv )
     struct timeval	*tv;
 {
     if ( sn->sn_flag & SNET_TLS ) {
-	/* ssl_write */
+	return( SSL_write( sn->sn_ssl, buf, len ));
     } else {
 	return( write( snet_fd( sn ), buf, len ));
     }
@@ -303,11 +341,12 @@ snet_readread( sn, buf, len, tv )
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
-	/* ssl_read( ... ) */
+	rc = SSL_read( sn->sn_ssl, buf, len );
     } else {
-	if (( rc = read( snet_fd( sn ), buf, len )) == 0 ) {
-	    sn->sn_flag = SNET_EOF;
-	}
+	rc = read( snet_fd( sn ), buf, len );
+    }
+    if ( rc == 0 ) {
+	sn->sn_flag = SNET_EOF;
     }
 
     return( rc );
