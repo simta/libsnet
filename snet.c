@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995,2000 Regents of The University of Michigan.
+ * Copyright (c) 1995,2001 Regents of The University of Michigan.
  * All Rights Reserved.  See COPYRIGHT.
  */
 
@@ -15,6 +15,9 @@
 #include <ctype.h>
 #include <string.h>
 
+#include <netinet/in.h>
+
+
 #ifdef __STDC__
 #include <stdarg.h>
 #else __STDC__
@@ -29,14 +32,11 @@
 #define SNET_FUZZY	1
 #define SNET_IN		2
 
-static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
+#define SNET_EOF	(1<<0)
+#define SNET_ENCRYPT	(1<<1)
 
-/*
- * Need SASL entry points.
- * Need snet_write().
- * Read and write must use SASL buffering for encryption.
- * All routines must use snet_read() and snet_write() to access network.
- */
+static int snet_saslread ___P(( SNET *, char *, int, struct timeval * ));
+static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
 
 /*
  * This routine is necessary, since snet_getline() doesn't differentiate
@@ -46,7 +46,7 @@ static int snet_readread ___P(( SNET *, char *, int, struct timeval * ));
 snet_eof( sn )
     SNET		*sn;
 {
-    return ( sn->sn_eof );
+    return ( sn->sn_flag & SNET_EOF );
 }
 
     SNET *
@@ -66,7 +66,7 @@ snet_attach( fd, max )
     }
     sn->sn_rbuflen = SNET_BUFLEN;
     sn->sn_rstate = SNET_BOL;
-    sn->sn_cur = sn->sn_end = sn->sn_rbuf;
+    sn->sn_rcur = sn->sn_rend = sn->sn_rbuf;
     sn->sn_maxlen = max;
 
     if (( sn->sn_wbuf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
@@ -76,7 +76,17 @@ snet_attach( fd, max )
     }
     sn->sn_wbuflen = SNET_BUFLEN;
 
-    sn->sn_eof = 0;
+    sn->sn_flag = 0;
+
+    sn->sn_encrypt = NULL;
+    sn->sn_decrypt = NULL;
+    sn->sn_crypto = NULL;
+    sn->sn_ebuf = NULL;
+    sn->sn_ebuflen = 0;
+    sn->sn_dbuf = NULL;
+    sn->sn_dcur = sn->sn_dend = NULL;
+    sn->sn_dbuflen = 0;
+
     return( sn );
 }
 
@@ -100,6 +110,10 @@ snet_close( sn )
 {
     free( sn->sn_wbuf );
     free( sn->sn_rbuf );
+    if ( sn->sn_crypto ) {
+	free( sn->sn_ebuf );
+	free( sn->sn_dbuf );
+    }
     if ( close( sn->sn_fd ) < 0 ) {
 	return( -1 );
     }
@@ -134,16 +148,16 @@ snet_writef( sn, format, va_alist )
     va_start( vl );
 #endif __STDC__
 
-#define SNET_WRITEFGROW(x)					\
-    while ( cur + (x) > end ) {					\
-	if (( sn->sn_wbuf = (char *)realloc( sn->sn_wbuf,	\
-		sn->sn_wbuflen + SNET_BUFLEN )) == NULL ) {	\
-	    abort();						\
-	}							\
-	cur = sn->sn_wbuf + sn->sn_wbuflen - ( end - cur );	\
-	sn->sn_wbuflen += SNET_BUFLEN;				\
-	end = sn->sn_wbuf + sn->sn_wbuflen;			\
-    }		
+#define SNET_WRITEFGROW(x)						\
+	    while ( cur + (x) > end ) {					\
+		if (( sn->sn_wbuf = (char *)realloc( sn->sn_wbuf,	\
+			sn->sn_wbuflen + SNET_BUFLEN )) == NULL ) {	\
+		    abort();						\
+		}							\
+		cur = sn->sn_wbuf + sn->sn_wbuflen - ( end - cur );	\
+		sn->sn_wbuflen += SNET_BUFLEN;				\
+		end = sn->sn_wbuf + sn->sn_wbuflen;			\
+	    }		
 
     cur = sn->sn_wbuf;
     end = sn->sn_wbuf + sn->sn_wbuflen;
@@ -219,7 +233,8 @@ snet_writef( sn, format, va_alist )
 		break;
 
 	    default :
-		SNET_WRITEFGROW( 1 );
+		SNET_WRITEFGROW( 2 );
+		*cur++ = '%';
 		*cur++ = *format;
 		break;
 	    }
@@ -232,7 +247,38 @@ snet_writef( sn, format, va_alist )
 }
 
 /*
- * Set non-blocking IO?  Do we need to bother?
+ * Enable SASL.  Should we check that esize and dsize are > 0?
+ */
+    int
+snet_sasl( sn, crypto, encrypt, decrypt, esize, dsize )
+    SNET		*sn;
+    void		*crypto;
+    int			(*encrypt)( void *, char *, int );
+    int			(*decrypt)( void *, char *, int );
+    unsigned int	esize, dsize;
+{
+    sn->sn_crypto = crypto;
+    sn->sn_encrypt = encrypt;
+    sn->sn_decrypt = decrypt;
+
+    if (( sn->sn_ebuf = (char *)malloc( esize + 4 )) == NULL ) {
+	return( -1 );
+    }
+    sn->sn_ebuflen = esize;
+
+    if (( sn->sn_dbuf = (char *)malloc( dsize + 4 )) == NULL ) {
+	free( sn->sn_ebuf );
+	return( -1 );
+    }
+    sn->sn_dbuflen = dsize;
+    sn->sn_dend = sn->sn_dbuf;
+    sn->sn_dcur = NULL;
+
+    return( 0 );
+}
+
+/*
+ * Should we set non-blocking IO?  Do we need to bother?
  * We'll leave tv in here now, so that we don't have to change the call
  * later.  It's currently ignored.
  */
@@ -243,7 +289,87 @@ snet_write( sn, buf, len, tv )
     int			len;
     struct timeval	*tv;
 {
-    return( write( snet_fd( sn ), buf, len ));
+
+    if ( sn->sn_crypto == NULL ) {
+	return( write( snet_fd( sn ), buf, len ));
+    }
+
+    abort();
+}
+
+    static int
+snet_saslread( sn, buf, len, tv )
+    SNET		*sn;
+    char		*buf;
+    int			len;
+    struct timeval	*tv;
+{
+    uint32_t		maxrbuf;
+    int			rc;
+    extern int		errno;
+
+    if ( sn->sn_crypto == NULL ) {
+	return( snet_readread( sn, buf, len, tv ));
+    }
+
+    /*
+     * we already have decrypted data
+     */
+    if ( sn->sn_dcur != NULL ) {
+	maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
+	goto gotsum;
+    }
+
+    /* if we already have encrypted data (or no data), read some more */
+    for (;;) {
+	if ( sn->sn_dend - sn->sn_dbuf < 4 ) {
+	    maxrbuf = sn->sn_dbuflen + 4;
+	    maxrbuf -= ( sn->sn_dend - sn->sn_dbuf );
+	} else {
+	    maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
+	    if ( maxrbuf > sn->sn_dbuflen ) {
+		errno = EPROTO;				/* losers... */
+		return( -1 );
+	    }
+
+	    /* check for full buffer */
+	    if (( maxrbuf -= ( sn->sn_dend - ( sn->sn_dbuf + 4 ))) <= 0 ) {
+		break;
+	    }
+	}
+
+	if (( rc = snet_readread( sn, sn->sn_dend, maxrbuf, tv )) <= 0 ) {
+	    return( rc );
+	}
+	sn->sn_dend += rc;
+    }
+
+    /*
+     * we have a full encrypted buffer: decrypt it, save state,
+     * and return some
+     */
+    sn->sn_dcur = sn->sn_dbuf + 4;
+    maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
+    (*sn->sn_decrypt)( sn->sn_crypto, sn->sn_dcur, maxrbuf );
+
+gotsum:
+#define min(x,y)	(((x)<(y))?(x):(y))
+    maxrbuf -= ( sn->sn_dcur - ( sn->sn_dbuf + 4 ));
+    rc = min( len, maxrbuf );
+    memcpy( buf, sn->sn_dcur, rc );
+    sn->sn_dcur += rc;
+
+    /* did we exhaust the decrypted data? */
+    if ( rc == maxrbuf ) {
+	if ( sn->sn_dcur < sn->sn_dend ) { /* anything past decrypted data? */
+	    memcpy( sn->sn_dbuf, sn->sn_dcur, sn->sn_dend - sn->sn_dcur );
+	    sn->sn_dend = sn->sn_dbuf + ( sn->sn_dend - sn->sn_dcur );
+	} else {
+	    sn->sn_dend = sn->sn_dbuf;
+	}
+	sn->sn_dcur = NULL;
+    }
+    return( rc );
 }
 
     static int
@@ -297,7 +423,7 @@ snet_readread( sn, buf, len, tv )
     }
 
     if (( rc = read( snet_fd( sn ), buf, len )) == 0 ) {
-	sn->sn_eof = 1;
+	sn->sn_flag = SNET_EOF;
     }
     return( rc );
 }
@@ -318,22 +444,22 @@ snet_read( sn, buf, len, tv )
     /*
      * If there's data already buffered, make sure it's not left over
      * from snet_getline(), and then return whatever's left.
-     * XXX Note that snet_getline() calls snet_read().
+     * XXX Note that snet_getline() calls snet_saslread().
      */
-    if ( sn->sn_cur < sn->sn_end ) {
-	if (( *sn->sn_cur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
+    if ( sn->sn_rcur < sn->sn_rend ) {
+	if (( *sn->sn_rcur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
 	    sn->sn_rstate = SNET_BOL;
-	    sn->sn_cur++;
+	    sn->sn_rcur++;
 	}
-	if ( sn->sn_cur < sn->sn_end ) {
-	    rc = sn->sn_end - sn->sn_cur;
-	    memcpy( buf, sn->sn_cur, rc );
-	    sn->sn_cur = sn->sn_end = sn->sn_rbuf;
+	if ( sn->sn_rcur < sn->sn_rend ) {
+	    rc = min( sn->sn_rend - sn->sn_rcur, len );
+	    memcpy( buf, sn->sn_rcur, rc );
+	    sn->sn_rcur += rc;
 	    return( rc );
 	}
     }
 
-    return( snet_readread( sn, buf, len, tv ));
+    return( snet_saslread( sn, buf, len, tv ));
 }
 
 /*
@@ -350,20 +476,20 @@ snet_getline( sn, tv )
     int			rc;
     extern int		errno;
 
-    for ( eol = sn->sn_cur; ; eol++) {
-	if ( eol >= sn->sn_end ) {				/* fill */
+    for ( eol = sn->sn_rcur; ; eol++) {
+	if ( eol >= sn->sn_rend ) {				/* fill */
 	    /* pullup */
-	    if ( sn->sn_cur > sn->sn_rbuf ) {
-		if ( sn->sn_cur < sn->sn_end ) {
-		    memcpy( sn->sn_rbuf, sn->sn_cur,
-			    (unsigned)( sn->sn_end - sn->sn_cur ));
+	    if ( sn->sn_rcur > sn->sn_rbuf ) {
+		if ( sn->sn_rcur < sn->sn_rend ) {
+		    memcpy( sn->sn_rbuf, sn->sn_rcur,
+			    (unsigned)( sn->sn_rend - sn->sn_rcur ));
 		}
-		eol = sn->sn_end = sn->sn_rbuf + ( sn->sn_end - sn->sn_cur );
-		sn->sn_cur = sn->sn_rbuf;
+		eol = sn->sn_rend = sn->sn_rbuf + ( sn->sn_rend - sn->sn_rcur );
+		sn->sn_rcur = sn->sn_rbuf;
 	    }
 
 	    /* expand */
-	    if ( sn->sn_end == sn->sn_rbuf + sn->sn_rbuflen ) {
+	    if ( sn->sn_rend == sn->sn_rbuf + sn->sn_rbuflen ) {
 		if ( sn->sn_maxlen != 0 && sn->sn_rbuflen >= sn->sn_maxlen ) {
 		    errno = ENOMEM;
 		    return( NULL );
@@ -373,18 +499,19 @@ snet_getline( sn, tv )
 		    exit( 1 );
 		}
 		sn->sn_rbuflen += SNET_BUFLEN;
-		eol = sn->sn_end = sn->sn_rbuf + ( sn->sn_end - sn->sn_cur );
-		sn->sn_cur = sn->sn_rbuf;
+		eol = sn->sn_rend = sn->sn_rbuf + ( sn->sn_rend - sn->sn_rcur );
+		sn->sn_rcur = sn->sn_rbuf;
 	    }
 
-	    if (( rc = snet_readread( sn, sn->sn_end,
-		    sn->sn_rbuflen - ( sn->sn_end - sn->sn_rbuf ), tv )) < 0 ) {
+	    if (( rc = snet_saslread( sn, sn->sn_rend,
+		    sn->sn_rbuflen - ( sn->sn_rend - sn->sn_rbuf ),
+		    tv )) < 0 ) {
 		return( NULL );
 	    }
 	    if ( rc == 0 ) {	/* EOF */
 		return( NULL );
 	    }
-	    sn->sn_end += rc;
+	    sn->sn_rend += rc;
 	}
 
 	if ( *eol == '\r' || *eol == '\0' ) {
@@ -394,7 +521,7 @@ snet_getline( sn, tv )
 	if ( *eol == '\n' ) {
 	    if ( sn->sn_rstate == SNET_FUZZY ) {
 		sn->sn_rstate = SNET_BOL;
-		sn->sn_cur = eol + 1;
+		sn->sn_rcur = eol + 1;
 		continue;
 	    }
 	    sn->sn_rstate = SNET_BOL;
@@ -404,8 +531,8 @@ snet_getline( sn, tv )
     }
 
     *eol = '\0';
-    line = sn->sn_cur;
-    sn->sn_cur = eol + 1;
+    line = sn->sn_rcur;
+    sn->sn_rcur = eol + 1;
     return( line );
 }
 
