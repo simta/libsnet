@@ -532,11 +532,14 @@ snet_read( sn, buf, len, tv )
 
     rc = snet_readread( sn, buf, len, tv );
     if (( rc > 0 ) && ( sn->sn_rstate == SNET_FUZZY )) {
-	if ( *buf == '\n' ) {
-	    rc--;
-	    memmove( buf, buf + 1, rc );
-	}
 	sn->sn_rstate = SNET_BOL;
+	if ( *buf == '\n' ) {
+	    if ( --rc <= 0 ) {
+		rc = snet_readread( sn, buf, len, tv );
+	    } else {
+		memmove( buf, buf + 1, rc );
+	    }
+	}
     }
 
     return( rc );
