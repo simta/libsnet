@@ -252,6 +252,7 @@ snet_writef( sn, format, va_alist )
 		    *dbufoff = hexalpha[ d & 0x0f ];
 		    d = d >> 4;
 		} while ( d );
+		len = p - dbufoff;
 		SNET_WBUFGROW( len );
 		strncpy( cur, dbufoff, len );
 		cur += len;
