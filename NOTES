@@ -1,14 +1,35 @@
+Next step:
+	1. Give server a host key.  Connection is then encrypted,
+	but nothing is authenticated.
+
+	2. Give client a CA cert.  Client can then verify server.
+	Server still doesn't know who client is.
+
+	3. Give client a cert, make server ask for and verify client
+	cert.  Done.
+
+Both:
 SSL_CTX_set_verify
-SSL_CTX_use_certificate_file
+	On the server, set this to require a client cert.  On the
+	client, merely verify the server.  We may need to write
+	our own verify_callback()
+
+SSL_CTX_use_certificate.3 SSL_CTX_use_certificate_chain_file
+	Load file of certs.
 SSL_CTX_use_PrivateKey_file
+	Load private key.  Note that private key, root CA, and host
+	cert should all be able to be stored in one file.
 
 Client:
 SSL_CTX_load_verify_locations
+	Both?  Do I need this?
 
 Server:
 SSL_load_client_CA_file
 SSL_CTX_set_client_CA_list
-
+	These are used to tell the client which CA's can verify
+	this server, e.g. Verisign and CREN.  We get this from the
+	cert file.  E.g.:
 
         SSL_CTX *ctx;
         STACK_OF(X509_NAME) *cert_names;
