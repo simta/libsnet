@@ -21,7 +21,6 @@ typedef struct {
     int		sn_wbuflen;
     int		sn_flag;
 #ifdef TLS
-    void	*sn_sslctx;
     void	*sn_ssl;
 #endif TLS
 } SNET;
@@ -38,5 +37,4 @@ char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 		struct timeval * ));
 int	snet_read ___P(( SNET *, char *, int, struct timeval * ));
 int	snet_write ___P(( SNET *, char *, int, struct timeval * ));
-char	*snet_inittls ___P(( SNET *, int, int, char * ));
-char	*snet_starttls ___P(( SNET *, int ));
+int	snet_starttls ___P(( SNET *, SSL_CTX *, int ));

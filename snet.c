@@ -20,10 +20,7 @@
 
 #ifdef TLS
 #include <openssl/ssl.h>
-#include <openssl/rand.h>
-#include <openssl/err.h>
 #endif TLS
-
 
 #ifdef __STDC__
 #include <stdarg.h>
@@ -115,83 +112,32 @@ snet_close( sn )
 }
 
 #ifdef TLS
-    char *
-snet_inittls( sn, server, devrand, cryptofile )
+/*
+ * Returns 0 on success, and all further communication is through
+ * the OpenSSL layer.  Returns -1 on failure, check the OpenSSL error
+ * stack for specific errors.
+ */
+    int
+snet_starttls( sn, sslctx, sslaccept )
     SNET		*sn;
-    int			server;
-    int			devrand;
-    char		*cryptofile;
-{
-    char		randfile[ MAXPATHLEN ];
-    STACK_OF(X509_NAME)	*certnames;
-
-    SSL_load_error_strings();
-    SSL_library_init();
-    if ( !devrand ) {
-	if ( RAND_file_name( randfile, sizeof( randfile )) == NULL ) {
-	    return( ERR_error_string( ERR_get_error(), NULL ));
-	}
-	if ( RAND_load_file( randfile, -1 ) <= 0 ) {
-	    return( ERR_error_string( ERR_get_error(), NULL ));
-	}
-	if ( RAND_write_file( randfile ) < 0 ) {
-	    return( ERR_error_string( ERR_get_error(), NULL ));
-	}
-    }
-
-    if (( sn->sn_sslctx = SSL_CTX_new( server ? SSLv23_server_method() :
-	    SSLv23_client_method())) == NULL ) {
-	return( ERR_error_string( ERR_get_error(), NULL ));
-    }
-    if ( cryptofile ) {
-	if ( server ) {
-	    /* this is really supposed to be SSL_CTX_load_verify_locations */
-	    if (( certnames = SSL_load_client_CA_file( cryptofile )) == NULL ) {
-		return( "SSL_load_client_CA_file" );
-		return( ERR_error_string( ERR_get_error(), NULL ));
-	    }
-	    SSL_CTX_set_client_CA_list( sn->sn_sslctx, certnames );
-	}
-
-	if ( SSL_CTX_use_PrivateKey_file( sn->sn_sslctx,
-		cryptofile, SSL_FILETYPE_PEM ) != 1 ) {
-	    return( "SSL_CTX_use_PrivateKey_file" );
-	    return( ERR_error_string( ERR_get_error(), NULL ));
-	}
-
-	if ( SSL_CTX_use_certificate_chain_file( sn->sn_sslctx,
-		cryptofile ) != 1 ) {
-	    return( "SSL_CTX_use_certificate_chain_file" );
-	    return( ERR_error_string( ERR_get_error(), NULL ));
-	}
-	if ( SSL_CTX_check_private_key( sn->sn_sslctx ) != 1 ) {
-	    return( "SSL_CTX_check_private_key" );
-	    return( ERR_error_string( ERR_get_error(), NULL ));
-	}
-    }
-    return( NULL );
-}
-
-    char *
-snet_starttls( sn, server )
-    SNET		*sn;
-    int			server;
+    SSL_CTX		*sslctx;
+    int			sslaccept;
 {
     int			rc;
 
-    if (( sn->sn_ssl = SSL_new( sn->sn_sslctx )) == NULL ) {
-	return( "SSL_new" );
+    if (( sn->sn_ssl = SSL_new( sslctx )) == NULL ) {
+	return( -1 );
     }
     if ( SSL_set_fd( sn->sn_ssl, sn->sn_fd ) != 1 ) {
-	return( "SSL_set_fd" );
+	return( -1 );
     }
-    if ( server ) {
+    if ( sslaccept ) {
 	rc = SSL_accept( sn->sn_ssl );
     } else {
 	rc = SSL_connect( sn->sn_ssl );
     }
     if ( rc != 1 ) {
-	return( ERR_error_string( ERR_get_error(), NULL ));
+	return( -1 );
     }
     sn->sn_flag |= SNET_TLS;
     return( 0 );
