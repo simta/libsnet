@@ -74,3 +74,20 @@ AC_DEFUN([CHECK_ZEROCONF],
 	AC_MSG_RESULT(yes)
     fi
 ])
+
+AC_DEFUN([CHECK_PROFILED],
+[
+    # Allow user to control whether or not profiled libraries are built
+    AC_MSG_CHECKING(whether to build profiled libraries)
+    PROFILED=true
+    AC_ARG_ENABLE(profiled,
+      [  --enable-profiled       build profiled libsnet (default=yes)],
+      [test x_$enable_profiled = x_no && PROFILED=false]
+    )
+    AC_SUBST(PROFILED)
+    if test x_$PROFILED = x_true ; then
+      AC_MSG_RESULT(yes)
+    else
+      AC_MSG_RESULT(no)
+    fi
+])
