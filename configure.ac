@@ -11,8 +11,10 @@ AC_PROG_CC
 AC_PROG_INSTALL
 
 # Checks for libraries.
-AC_CHECK_LIB([ssl], [SSL_accept], , [CHECK_SSL])
-AC_CHECK_LIB([crypto], [SSLeay_version], , [CHECK_SSL])
+if test \! x_$with_ssl = x_no; then
+    AC_CHECK_LIB([ssl], [SSL_accept], , [CHECK_SSL])
+    AC_CHECK_LIB([crypto], [SSLeay_version], , [CHECK_SSL])
+fi
 
 # Checks for header files.
 #AC_HEADER_STDC
