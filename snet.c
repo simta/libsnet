@@ -487,18 +487,21 @@ snet_getline_multi( sn, logger, tv )
 	}
 
 	if ( strlen( line ) < 3 ) {
+	    errno = EINVAL;
 	    return( NULL );
 	}
 
 	if ( !isdigit( (int)line[ 0 ] ) ||
 		!isdigit( (int)line[ 1 ] ) ||
 		!isdigit( (int)line[ 2 ] )) {
+	    errno = EINVAL;
 	    return( NULL );
 	}
 
 	if ( line[ 3 ] != '\0' &&
 		line[ 3 ] != ' ' &&
 		line [ 3 ] != '-' ) {
+	    errno = EINVAL;
 	    return ( NULL );
 	}
 
