@@ -16,6 +16,16 @@ typedef struct {
 
 #define net_fd( n )	((n)->nh_fd)
 
-NET	*net_open();
-NET	*net_attach();
-char	*net_getline();
+#ifdef __STDC__
+#define ___P(x)		x
+#else __STDC__
+#define ___P(x)		()
+#endif __STDC__
+
+char	*net_error ___P(( NET * ));
+NET	*net_attach ___P(( int, int ));
+NET	*net_open ___P(( char *, int, int, int ));
+int	net_close ___P(( NET * ));
+int	net_writef ___P(( NET *, char *, ... ));
+char	*net_getline ___P(( NET *, struct timeval * ));
+int	net_read ___P(( NET *, char *, int, struct timeval * ));
