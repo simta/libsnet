@@ -2,7 +2,7 @@ SRC = snet.c
 OBJ = snet.o
 
 INCPATH=
-OPTOPTS=	-Wall -Wstrict-prototypes
+OPTOPTS=	-Wall # -Wstrict-prototypes
 CFLAGS=	${DEFS} ${OPTOPTS} ${INCPATH}
 TAGSFILE=	tags
 CC=	gcc

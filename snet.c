@@ -329,7 +329,7 @@ snet_saslread( sn, buf, len, tv )
 	} else {
 	    maxrbuf = ntohl( *(uint32_t *)sn->sn_dbuf );
 	    if ( maxrbuf > sn->sn_dbuflen ) {
-		errno = EPROTO;				/* losers... */
+		errno = EINVAL;				/* losers... */
 		return( -1 );
 	    }
 
