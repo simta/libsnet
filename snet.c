@@ -128,19 +128,18 @@ snet_starttls( sn, sslctx, sslaccept )
     if (( sn->sn_ssl = SSL_new( sslctx )) == NULL ) {
 	return( -1 );
     }
-    if ( SSL_set_fd( sn->sn_ssl, sn->sn_fd ) != 1 ) {
-	return( -1 );
+    if (( rc = SSL_set_fd( sn->sn_ssl, sn->sn_fd )) != 1 ) {
+	return( rc );
     }
     if ( sslaccept ) {
 	rc = SSL_accept( sn->sn_ssl );
     } else {
 	rc = SSL_connect( sn->sn_ssl );
     }
-    if ( rc != 1 ) {
-	return( -1 );
+    if ( rc == 1 ) {
+	sn->sn_flag |= SNET_TLS;
     }
-    sn->sn_flag |= SNET_TLS;
-    return( 0 );
+    return( rc );
 }
 #endif TLS
 
