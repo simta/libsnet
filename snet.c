@@ -34,6 +34,10 @@
 
 #define SNET_BUFLEN	1024
 
+/*
+ * BOL is beginning of line, FUZZY is after a CR but before a possible LF,
+ * IN is past BOL, but before the end of a line.
+ */
 #define SNET_BOL	0
 #define SNET_FUZZY	1
 #define SNET_IN		2
@@ -485,9 +489,11 @@ snet_hasdata( sn )
     SNET		*sn;
 {
     if ( sn->sn_rcur < sn->sn_rend ) {
-	if (( *sn->sn_rcur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
+	if ( sn->sn_rstate == SNET_FUZZY ) {
+	    if ( *sn->sn_rcur == '\n' ) {
+		sn->sn_rcur++;
+	    }
 	    sn->sn_rstate = SNET_BOL;
-	    sn->sn_rcur++;
 	}
 	if ( sn->sn_rcur < sn->sn_rend ) {
 	    return( 1 );
@@ -524,7 +530,16 @@ snet_read( sn, buf, len, tv )
 	return( rc );
     }
 
-    return( snet_readread( sn, buf, len, tv ));
+    rc = snet_readread( sn, buf, len, tv );
+    if (( rc > 0 ) && ( sn->sn_rstate == SNET_FUZZY )) {
+	if ( *buf == '\n' ) {
+	    rc--;
+	    memmove( buf, buf + 1, rc );
+	}
+	sn->sn_rstate = SNET_BOL;
+    }
+
+    return( rc );
 }
 
 /*
@@ -541,7 +556,7 @@ snet_getline( sn, tv )
     ssize_t		rc;
     extern int		errno;
 
-    for ( eol = sn->sn_rcur; ; eol++) {
+    for ( eol = sn->sn_rcur; ; eol++ ) {
 	if ( eol >= sn->sn_rend ) {				/* fill */
 	    /* pullup */
 	    if ( sn->sn_rcur > sn->sn_rbuf ) {
