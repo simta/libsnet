@@ -100,9 +100,8 @@ snet_close( sn )
  * Just like fprintf, only use the SNET header to get the fd, and use
  * writev() to move the data.
  *
- * Todo: %c, %f, *, . and, -
- * get rid of statics
- * handle aribtrary output
+ * Todo: %f, *, . and, -
+ * should handle aribtrarily large output
  */
     int
 #ifdef __STDC__
@@ -157,6 +156,16 @@ snet_writef( sn, format, va_alist )
 		i++;
 		break;
 
+	    case 'c' :
+		if ( --dbufoff < dbuf ) {
+		    abort();
+		}
+		*dbufoff = va_arg( vl, char );
+		iov[ i ].iov_base = dbufoff;
+		iov[ i ].iov_len = 1;
+		i++;
+		break;
+
 	    case 'd' :
 		d = va_arg( vl, int );
 		p = dbufoff;
@@ -179,8 +188,25 @@ snet_writef( sn, format, va_alist )
 		    if ( --dbufoff < dbuf ) {
 			abort();
 		    }
-		    *dbufoff = '0' + ( d % 8 );
-		    d /= 8;
+		    *dbufoff = '0' + ( d & 0007 );
+		    d = d >> 3;
+		} while ( d );
+		iov[ i ].iov_base = dbufoff;
+		iov[ i ].iov_len = p - dbufoff;
+		i++;
+		break;
+
+	    case 'x' :
+		d = va_arg( vl, int );
+		p = dbufoff;
+		do {
+		    char	hexalpha[] = "0123456789abcdef";
+
+		    if ( --dbufoff < dbuf ) {
+			abort();
+		    }
+		    *dbufoff = hexalpha[ d & 0x0f ];
+		    d = d >> 4;
 		} while ( d );
 		iov[ i ].iov_base = dbufoff;
 		iov[ i ].iov_len = p - dbufoff;
