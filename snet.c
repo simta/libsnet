@@ -195,6 +195,7 @@ snet_starttls( sn, server )
     if ( rc != 1 ) {
 	return( ERR_error_string( ERR_get_error(), NULL ));
     }
+    sn->sn_flag |= SNET_TLS;
     return( 0 );
 }
 #endif TLS
