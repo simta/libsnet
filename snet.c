@@ -7,7 +7,17 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 
+#include <stdio.h>
+#include <unistd.h>
+#include <strings.h>
+#include <string.h>
+#include <stdlib.h>
+
+#ifdef __STDC__
+#include <stdarg.h>
+#else __STDC__
 #include <varargs.h>
+#endif __STDC__
 #include <syslog.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -62,7 +72,7 @@ net_attach( fd, max )
 }
 
     NET *
-net_open( path, flags, mode )
+net_open( path, flags, mode, max )
     char	*path;
     int		flags;
     int		mode;
@@ -72,21 +82,18 @@ net_open( path, flags, mode )
     if (( fd = open( path, flags, mode )) < 0 ) {
 	return( NULL );
     }
-    return( net_attach( fd ));
+    return( net_attach( fd, max ));
 }
 
+    int
 net_close( n )
     NET		*n;
 {
-    if ( free( n->nh_buf ) != 1 ) {
-	return( -1 );
-    }
+    free( n->nh_buf );
     if ( close( n->nh_fd ) < 0 ) {
 	return( -1 );
     }
-    if ( free( n ) != 1 ) {
-	return( -1 );
-    }
+    free( n );
     return( 0 );
 }
 
@@ -98,21 +105,27 @@ net_close( n )
  * get rid of statics
  * handle aribtrary output
  */
-net_writef( va_alist )
+    int
+#ifdef __STDC__
+net_writef( NET *n, char *format, ... )
+#else __STDC__
+net_writef( n, format, va_alist )
+    NET			*n;
+    char		*format;
     va_dcl
+#endif __STDC__
 {
     static struct iovec	*iov = NULL;
     static int		iovcnt = 0;
     va_list		vl;
     char		dbuf[ 1024 ], *p, *dbufoff = dbuf + sizeof( dbuf );
-    NET			*n;
-    char		*format;
     int			i, state, d;
 
+#ifdef __STDC__
+    va_start( vl, format );
+#else __STDC__
     va_start( vl );
-
-    n = va_arg( vl, NET * );
-    format = va_arg( vl, char * );
+#endif __STDC__
 
     for ( state = NET_BOL, i = 0; *format; format++ ) {
 	/*
@@ -133,7 +146,7 @@ net_writef( va_alist )
 
 	if ( *format == '%' ) {
 	    if ( state == NET_IN ) {
-		iov[ i ].iov_len = format - iov[ i ].iov_base;
+		iov[ i ].iov_len = format - (char *)iov[ i ].iov_base;
 		state = NET_BOL;
 		i++;
 	    }
@@ -175,7 +188,7 @@ net_writef( va_alist )
 	}
     }
     if ( state == NET_IN ) {
-	iov[ i ].iov_len = format - iov[ i ].iov_base;
+	iov[ i ].iov_len = format - (char *)iov[ i ].iov_base;
 	i++;
     }
 
@@ -211,7 +224,7 @@ net_getline( n, tv )
 
 	    /* expand */
 	    if ( n->nh_end == n->nh_buf + n->nh_buflen ) {
-		if ( n->nh_buflen >= n->nh_maxlen ) {
+		if ( n->nh_maxlen != 0 && n->nh_buflen >= n->nh_maxlen ) {
 		    errno = ENOMEM;
 		    return( NULL );
 		}
@@ -255,22 +268,27 @@ net_getline( n, tv )
     return( t );
 }
 
+    int
 net_read( n, buf, len, tv )
     NET			*n;
     char		*buf;
     int			len;
     struct timeval	*tv;
 {
+#ifndef linux
     struct timeval	tv_begin, tv_end;
+#endif linux
     fd_set		fds;
     extern int		errno;
 
     if ( tv ) {
 	FD_ZERO( &fds );
 	FD_SET( net_fd( n ), &fds );
+#ifndef linux
 	if ( gettimeofday( &tv_begin, NULL ) < 0 ) {
 	    return( -1 );
 	}
+#endif linux
 	/* time out case? */
 	if ( select( net_fd( n ) + 1, &fds, NULL, NULL, tv ) < 0 ) {
 	    return( -1 );
@@ -279,20 +297,24 @@ net_read( n, buf, len, tv )
 	    errno = ETIME;
 	    return( -1 );
 	}
+#ifndef linux
 	if ( gettimeofday( &tv_end, NULL ) < 0 ) {
 	    return( -1 );
 	}
 
-	tv->tv_usec -= tv_end.tv_usec - tv_begin.tv_usec;
-	if ( tv->tv_usec < 0 ) {
+	if ( tv_begin.tv_usec > tv_end.tv_usec ) {
+	    tv_end.tv_usec += 1000000;
+	    tv_end.tv_sec -= 1;
+	}
+	if (( tv->tv_usec -= ( tv_end.tv_usec - tv_begin.tv_usec )) < 0 ) {
 	    tv->tv_usec += 1000000;
 	    tv->tv_sec -= 1;
 	}
-	tv->tv_sec -= tv_end.tv_sec - tv_begin.tv_sec;
-	if ( tv->tv_sec < 0 ) {
+	if (( tv->tv_sec -= ( tv_end.tv_sec - tv_begin.tv_sec )) < 0 ) {
 	    errno = ETIME;
 	    return( -1 );
 	}
+#endif linux
     }
 
     errno = 0;
