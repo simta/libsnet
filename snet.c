@@ -20,6 +20,7 @@
 
 #ifdef TLS
 #include <openssl/ssl.h>
+#include <openssl/rand.h>
 #include <openssl/err.h>
 #endif TLS
 
@@ -119,8 +120,19 @@ snet_inittls( sn, server )
     SNET		*sn;
     int			server;
 {
-    SSL_library_init();
+    char		randfile[ MAXPATHLEN ];
+
     SSL_load_error_strings();
+    SSL_library_init();
+    if ( RAND_file_name( randfile, sizeof( randfile )) == NULL ) {
+	return( -1 );
+    }
+    if ( RAND_load_file( randfile, -1 ) <= 0 ) {
+	return( -1 );
+    }
+    if ( RAND_write_file( randfile ) < 0 ) {
+	return( -1 );
+    }
 
     if (( sn->sn_sslctx = SSL_CTX_new( server ? SSLv23_server_method() :
 	    SSLv23_client_method())) == NULL ) {
@@ -148,9 +160,10 @@ snet_starttls( sn, server )
 	rc = SSL_connect( sn->sn_ssl );
     }
     if ( rc != 1 ) {
-	return( ERR_error_string( SSL_get_error( sn->sn_ssl, rc ), NULL ));
+//	return( SSL_get_error( sn->sn_ssl, rc ));
+	return( ERR_error_string( ERR_get_error(), NULL ));
     }
-    return( NULL );
+    return( 0 );
 }
 #endif TLS
 
