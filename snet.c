@@ -116,22 +116,25 @@ snet_close( sn )
 
 #ifdef TLS
     int
-snet_inittls( sn, server )
+snet_inittls( sn, server, devrand )
     SNET		*sn;
     int			server;
+    int			devrand;
 {
     char		randfile[ MAXPATHLEN ];
 
     SSL_load_error_strings();
     SSL_library_init();
-    if ( RAND_file_name( randfile, sizeof( randfile )) == NULL ) {
-	return( -1 );
-    }
-    if ( RAND_load_file( randfile, -1 ) <= 0 ) {
-	return( -1 );
-    }
-    if ( RAND_write_file( randfile ) < 0 ) {
-	return( -1 );
+    if ( !devrand ) {
+	if ( RAND_file_name( randfile, sizeof( randfile )) == NULL ) {
+	    return( -1 );
+	}
+	if ( RAND_load_file( randfile, -1 ) <= 0 ) {
+	    return( -1 );
+	}
+	if ( RAND_write_file( randfile ) < 0 ) {
+	    return( -1 );
+	}
     }
 
     if (( sn->sn_sslctx = SSL_CTX_new( server ? SSLv23_server_method() :
