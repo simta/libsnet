@@ -1,3 +1,8 @@
+SHELL=/bin/sh
+
+srcdir=@srcdir@
+VPATH=@srcdir@
+
 prefix      =	@prefix@
 libdir      =	@libdir@
 includedir  =	@includedir@
@@ -28,15 +33,17 @@ DISTDIR=	../libsnet-${VERSION}
 	$(LIBTOOL) --mode=compile \
 	  $(CC) -c $(CFLAGS) $<
 	@if test x_$(PROFILED) = x_true ; then echo "building profiled $@" ; \
-	  ( cd profiled ; ../$(LIBTOOL) --mode=compile \
-	  $(CC) -c $(CFLAGS) -p -I.. ../$< >/dev/null 2>&1 ) ; fi
+	  ( mkdir -p profiled; cd profiled ; ../$(LIBTOOL) --mode=compile \
+	  $(CC) -c $(CFLAGS) -p -I.. -I$(srcdir) `if [ -f $< ]; then echo $<; \
+	  else echo ../$<; fi` >/dev/null 2>&1 ) ; fi
 
 .c.lo:
 	$(LIBTOOL) --mode=compile \
 	  $(CC) -c $(CFLAGS) $<
 	@if test x_$(PROFILED) = x_true ; then echo "building profiled $@" ; \
-	  ( cd profiled ; ../$(LIBTOOL) --mode=compile \
-	  $(CC) -c $(CFLAGS) -p -I.. ../$< >/dev/null 2>&1 ) ; fi
+	  ( mkdir -p profiled; cd profiled ; ../$(LIBTOOL) --mode=compile \
+	  $(CC) -c $(CFLAGS) -p -I.. -I$(srcdir) `if [ -f $< ]; then echo $<; \
+	  else echo ../$<; fi` >/dev/null 2>&1 ) ; fi
 
 
 all:		libsnet.la
