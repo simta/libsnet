@@ -16,3 +16,6 @@
 #undef _FILE_OFFSET_BITS
 
 #undef HAVE_LIBSSL
+
+/* Define to 1 if you have the `sasl' library (-lsasl2). */
+#undef HAVE_LIBSASL

@@ -24,6 +24,10 @@
 #include <openssl/ssl.h>
 #endif /* HAVE_LIBSSL */
 
+#ifdef HAVE_LIBSASL
+#include <sasl/sasl.h>
+#endif /* HAVE_LIBSASL */
+
 #ifdef __STDC__
 #include <stdarg.h>
 #else /* __STDC__ */
@@ -32,7 +36,7 @@
 
 #include "snet.h"
 
-#define SNET_BUFLEN	1024
+#define SNET_BUFLEN	4096
 
 /*
  * BOL is beginning of line, FUZZY is after a CR but before a possible LF,
@@ -44,6 +48,9 @@
 
 #define SNET_EOF	(1<<0)
 #define SNET_TLS	(1<<1)
+#ifdef HAVE_LIBSASL
+#define SNET_SASL	(1<<2)
+#endif /* HAVE_LIBSASL */
 
 static ssize_t snet_readread ___P(( SNET *, char *, size_t, struct timeval * ));
 
@@ -151,6 +158,42 @@ snet_starttls( sn, sslctx, sslaccept )
     return( rc );
 }
 #endif /* HAVE_LIBSSL */
+
+#ifdef HAVE_LIBSASL
+    int
+snet_setsasl( sn, conn )
+    SNET	*sn;
+    sasl_conn_t	*conn;
+{
+
+    const int		*ssfp;
+    unsigned int	*maxp;
+    int		rc;
+
+    /* XXX - flush cache */
+
+    /* security layer security strength factor.  If 0, call to sasl_encode,
+     * sasl_decode unnecessary
+     */
+    if (( rc = sasl_getprop( conn, SASL_SSF, (const void **) &ssfp))
+	    != SASL_OK ) {
+	return( -1 );
+    }
+    sn->sn_saslssf = *ssfp;
+
+    /* security layer max output buf unsigned */
+    if (( rc = sasl_getprop( conn, SASL_MAXOUTBUF, (const void **) &maxp))
+	    != SASL_OK ) {
+	return( -1 );
+    }
+    sn->sn_saslmaxout = *maxp;
+
+    sn->sn_conn = conn;
+    sn->sn_flag |= SNET_SASL;
+
+    return( 0 );
+}
+#endif /* HAVE_LIBSASL */
 
 /*
  * Just like fprintf, only use the SNET header to get the fd, and use
@@ -407,6 +450,20 @@ snet_write( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
+#ifdef HAVE_LIBSASL
+    if (( sn->sn_flag & SNET_SASL ) && ( sn->sn_saslssf )) {
+	const char		*ebuf;
+	unsigned		elen;
+
+	/* Encode if SASL needs it */
+	if (( sasl_encode( sn->sn_conn, buf, len, &ebuf, &elen )) != SASL_OK ) {
+	    return( -1 );
+	}
+	buf = (char*)ebuf;
+	len = elen;
+    }
+#endif /* HAVE_LIBSASL */
+
     if ( sn->sn_flag & SNET_TLS ) {
 #ifdef HAVE_LIBSSL
 	return( SSL_write( sn->sn_ssl, buf, len ));
@@ -480,6 +537,24 @@ snet_readread( sn, buf, len, tv )
     if ( rc == 0 ) {
 	sn->sn_flag = SNET_EOF;
     }
+
+#ifdef HAVE_LIBSASL
+    if (( sn->sn_flag & SNET_SASL ) && ( sn->sn_saslssf )) {
+	/* Decode via SASL */
+	const char	*dbuf;
+	unsigned	dbuf_len;
+
+	if ( sasl_decode( sn->sn_conn, buf, rc, &dbuf, &dbuf_len )
+		!= SASL_OK ) {
+	    return( -1 );
+	}
+	if ( dbuf_len > len ) {
+	    /* XXX - resize buf */
+	}
+	memcpy( buf, dbuf, dbuf_len );
+	rc = dbuf_len;
+    }
+#endif /* HAVE_LIBSASL */
 
     return( rc );
 }

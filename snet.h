@@ -23,9 +23,16 @@ typedef struct {
 #ifdef HAVE_LIBSSL
     void	*sn_ssl;
 #endif /* HAVE_LIBSSL */
+
+#ifdef HAVE_LIBSASL
+    sasl_conn_t	*sn_conn;
+    int		sn_saslssf;
+    unsigned int	sn_saslmaxout;
+#endif /* HAVE_LIBSASL */
 } SNET;
 
 #define snet_fd( sn )	((sn)->sn_fd)
+#define snet_saslssf( sn )	((sn)->sn_saslssf)
 
 int	snet_eof ___P(( SNET * ));
 SNET	*snet_attach ___P(( int, int ));
@@ -41,3 +48,6 @@ ssize_t	snet_write ___P(( SNET *, char *, size_t, struct timeval * ));
 #ifdef HAVE_LIBSSL
 int	snet_starttls ___P(( SNET *, SSL_CTX *, int ));
 #endif /* HAVE_LIBSSL */
+#ifdef HAVE_LIBSASL
+int	snet_setsasl  ___P(( SNET *, sasl_conn_t * ));
+#endif /* HAVE_LIBSASL */
