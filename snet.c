@@ -163,8 +163,15 @@ snet_writef( sn, format, va_alist )
 #endif /* __STDC__ */
 {
     va_list		vl;
-    char		dbuf[ 128 ], *p, *dbufoff;
+    char		dbuf[ 128 ], *p;
+    char		*dbufoff;
     int			d, len;
+    long		l;
+    long long		ll;
+    unsigned int	u_d;
+    unsigned long	u_l;
+    unsigned long long	u_ll;
+    int			is_long, is_longlong, is_unsigned, is_negative;
     char		*cur, *end;
 
 #ifdef __STDC__
@@ -188,12 +195,17 @@ snet_writef( sn, format, va_alist )
     end = sn->sn_wbuf + sn->sn_wbuflen;
 
     for ( ; *format; format++ ) {
-	dbufoff = dbuf + sizeof( dbuf );
 
 	if ( *format != '%' ) {
 	    SNET_WBUFGROW( 1 );
 	    *cur++ = *format;
 	} else {
+	    is_long = 0;
+	    is_longlong = 0;
+	    is_unsigned = 0;
+
+modifier:
+
 	    switch ( *++format ) {
 	    case 's' :
 		p = va_arg( vl, char * );
@@ -208,16 +220,66 @@ snet_writef( sn, format, va_alist )
 		*cur++ = va_arg( vl, int );
 		break;
 
+	    case 'l' :
+		if ( is_long ) {
+		    is_longlong = 1;
+		} else {
+		    is_long = 1;
+		}
+		goto modifier;
+
+	    case 'u' :
+		is_unsigned = 1;
+		goto modifier;
+
 	    case 'd' :
-		d = va_arg( vl, int );
-		p = dbufoff;
-		do {
-		    if ( --dbufoff < dbuf ) {
-			abort();
+		p = dbufoff = dbuf + sizeof( dbuf );
+
+#define SNET_WF_D(x)						\
+		if ( (x) < 0 ) {				\
+		    is_negative = 1;				\
+		    (x) = - (x);				\
+		} else {					\
+		    is_negative = 0;				\
+		}						\
+		do {						\
+		    if ( --dbufoff < dbuf ) {			\
+			abort();				\
+		    }						\
+		    *dbufoff = '0' + ( (x) % 10 );		\
+		    (x) /= 10;					\
+		} while ( (x) );				\
+		if ( !is_unsigned && is_negative ) {		\
+		    if ( --dbufoff < dbuf ) {			\
+			abort();				\
+		    }						\
+		    *dbufoff = '-';				\
+		}
+
+		if ( is_unsigned ) {
+		    if ( is_longlong ) {
+			u_ll = va_arg( vl, unsigned long long );
+			SNET_WF_D( u_ll );
+		    } else if ( is_long ) {
+			u_l = va_arg( vl, unsigned long );
+			SNET_WF_D( u_l );
+		    } else {
+			u_d = va_arg( vl, unsigned int );
+			SNET_WF_D( u_d );
 		    }
-		    *dbufoff = '0' + ( d % 10 );
-		    d /= 10;
-		} while ( d );
+		} else {
+		    if ( is_longlong ) {
+			ll = va_arg( vl, long long );
+			SNET_WF_D( ll );
+		    } else if ( is_long ) {
+			l = va_arg( vl, long );
+			SNET_WF_D( l );
+		    } else {
+			d = va_arg( vl, int );
+			SNET_WF_D( d );
+		    }
+		}
+
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
 		strncpy( cur, dbufoff, len );
@@ -225,15 +287,28 @@ snet_writef( sn, format, va_alist )
 		break;
 
 	    case 'o' :
-		d = va_arg( vl, int );
-		p = dbufoff;
-		do {
-		    if ( --dbufoff < dbuf ) {
-			abort();
-		    }
-		    *dbufoff = '0' + ( d & 0007 );
-		    d = d >> 3;
-		} while ( d );
+		p = dbufoff = dbuf + sizeof( dbuf );
+
+#define SNET_WF_O(x)						\
+		do {						\
+		    if ( --dbufoff < dbuf ) {			\
+			abort();				\
+		    }						\
+		    *dbufoff = '0' + ( (x) & 0007 );		\
+		    (x) = (x) >> 3;				\
+		} while ( (x) );
+
+		if ( is_longlong ) {
+		    u_ll = va_arg( vl, unsigned long long );
+		    SNET_WF_O( u_ll );
+		} else if ( is_long ) {
+		    u_l = va_arg( vl, unsigned long );
+		    SNET_WF_O( u_l );
+		} else {
+		    u_d = va_arg( vl, unsigned int );
+		    SNET_WF_O( u_d );
+		}
+
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
 		strncpy( cur, dbufoff, len );
@@ -241,17 +316,59 @@ snet_writef( sn, format, va_alist )
 		break;
 
 	    case 'x' :
-		d = va_arg( vl, int );
-		p = dbufoff;
-		do {
-		    char	hexalpha[] = "0123456789abcdef";
+		p = dbufoff = dbuf + sizeof( dbuf );
 
-		    if ( --dbufoff < dbuf ) {
-			abort();
-		    }
-		    *dbufoff = hexalpha[ d & 0x0f ];
-		    d = d >> 4;
-		} while ( d );
+#define SNET_WF_X(x)						\
+		do {						\
+		    char	hexalpha[] = "0123456789abcdef";\
+		    if ( --dbufoff < dbuf ) {			\
+			abort();				\
+		    }						\
+		    *dbufoff = hexalpha[ (x) & 0x0f ];		\
+		    (x) = (x) >> 4;				\
+		} while ( (x) );
+
+		if ( is_longlong ) {
+		    u_ll = va_arg( vl, unsigned long long );
+		    SNET_WF_X( u_ll );
+		} else if ( is_long ) {
+		    u_l = va_arg( vl, unsigned long );
+		    SNET_WF_X( u_l );
+		} else {
+		    u_d = va_arg( vl, unsigned int );
+		    SNET_WF_X( u_d );
+		}
+
+		len = p - dbufoff;
+		SNET_WBUFGROW( len );
+		strncpy( cur, dbufoff, len );
+		cur += len;
+		break;
+
+	    case 'X' :
+		p = dbufoff = dbuf + sizeof( dbuf );
+
+#define SNET_WF_XX(x)						\
+		do {						\
+		    char	hexalpha[] = "0123456789ABCDEF";\
+		    if ( --dbufoff < dbuf ) {			\
+			abort();				\
+		    }						\
+		    *dbufoff = hexalpha[ (x) & 0x0f ];		\
+		    (x) = (x) >> 4;				\
+		} while ( (x) );
+
+		if ( is_longlong ) {
+		    u_ll = va_arg( vl, unsigned long long );
+		    SNET_WF_XX( u_ll );
+		} else if ( is_long ) {
+		    u_l = va_arg( vl, unsigned long );
+		    SNET_WF_XX( u_l );
+		} else {
+		    u_d = va_arg( vl, unsigned int );
+		    SNET_WF_XX( u_d );
+		}
+
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
 		strncpy( cur, dbufoff, len );
@@ -261,7 +378,7 @@ snet_writef( sn, format, va_alist )
 	    default :
 		SNET_WBUFGROW( 2 );
 		*cur++ = '%';
-		*cur++ = *format;
+		*cur++ = 'E';
 		break;
 	    }
 	}
