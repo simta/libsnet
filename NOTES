@@ -1,5 +1,5 @@
 Next step:
-	1. Give server a host key.  Connection is then encrypted,
+(verify)1. Give server a host key.  Connection is then encrypted,
 	but nothing is authenticated.
 
 	2. Give client a CA cert.  Client can then verify server.
@@ -22,7 +22,9 @@ SSL_CTX_use_PrivateKey_file
 
 Client:
 SSL_CTX_load_verify_locations
-	Both?  Do I need this?
+	Both?  Do I need this?  I think both.  I think maybe we
+	don't need SSL_CTX_use_certificate_chain_file at all, but
+	this function, instead.
 
 Server:
 SSL_load_client_CA_file

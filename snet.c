@@ -145,11 +145,14 @@ snet_inittls( sn, server, devrand, cryptofile )
     }
     if ( cryptofile ) {
 	if ( server ) {
+	    /* this is really supposed to be SSL_CTX_load_verify_locations */
+#ifdef notdef
 	    if (( certnames = SSL_load_client_CA_file( cryptofile )) == NULL ) {
 		return( "SSL_load_client_CA_file" );
 		return( ERR_error_string( ERR_get_error(), NULL ));
 	    }
 	    SSL_CTX_set_client_CA_list( sn->sn_sslctx, certnames );
+#endif notdef
 	}
 
 	if ( SSL_CTX_use_PrivateKey_file( sn->sn_sslctx,
@@ -161,6 +164,10 @@ snet_inittls( sn, server, devrand, cryptofile )
 	if ( SSL_CTX_use_certificate_chain_file( sn->sn_sslctx,
 		cryptofile ) != 1 ) {
 	    return( "SSL_CTX_use_certificate_chain_file" );
+	    return( ERR_error_string( ERR_get_error(), NULL ));
+	}
+	if ( SSL_CTX_check_private_key( sn->sn_sslctx ) != 1 ) {
+	    return( "SSL_CTX_check_private_key" );
 	    return( ERR_error_string( ERR_get_error(), NULL ));
 	}
     }
@@ -186,7 +193,6 @@ snet_starttls( sn, server )
 	rc = SSL_connect( sn->sn_ssl );
     }
     if ( rc != 1 ) {
-//	return( SSL_get_error( sn->sn_ssl, rc ));
 	return( ERR_error_string( ERR_get_error(), NULL ));
     }
     return( 0 );
