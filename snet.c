@@ -259,7 +259,7 @@ snet_writef( sn, format, va_alist )
 
 	    case 'c' :
 		SNET_WRITEFGROW( 1 );
-		*cur++ = va_arg( vl, char );
+		*cur++ = va_arg( vl, int );
 		break;
 
 	    case 'd' :
