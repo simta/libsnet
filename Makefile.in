@@ -1,11 +1,12 @@
 SRC = snet.c
 OBJ = snet.o
 
-INCPATH=
+INCPATH=	@CPPFLAGS@
+DEFS=		@TLSDEFS@
 OPTOPTS=	-Wall # -Wstrict-prototypes
-CFLAGS=	${DEFS} ${OPTOPTS} ${INCPATH} -DTLS
+CFLAGS=		${DEFS} ${OPTOPTS} ${INCPATH}
 TAGSFILE=	tags
-CC=	gcc
+CC=		@CC@	
 
 all : libsnet.a
 
