@@ -478,6 +478,22 @@ snet_readread( sn, buf, len, tv )
     return( rc );
 }
 
+    int
+snet_hasdata( sn )
+    SNET		*sn;
+{
+    if ( sn->sn_rcur < sn->sn_rend ) {
+	if (( *sn->sn_rcur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
+	    sn->sn_rstate = SNET_BOL;
+	    sn->sn_rcur++;
+	}
+	if ( sn->sn_rcur < sn->sn_rend ) {
+	    return( 1 );
+	}
+    }
+    return( 0 );
+}
+
 /*
  * External entry point for reading with the snet library.  Compatible
  * with snet_getline()'s buffering.
@@ -496,20 +512,14 @@ snet_read( sn, buf, len, tv )
      * from snet_getline(), and then return whatever's left.
      * Note that snet_getline() calls snet_readread().
      */
-    if ( sn->sn_rcur < sn->sn_rend ) {
-	if (( *sn->sn_rcur == '\n' ) && ( sn->sn_rstate == SNET_FUZZY )) {
-	    sn->sn_rstate = SNET_BOL;
-	    sn->sn_rcur++;
-	}
-	if ( sn->sn_rcur < sn->sn_rend ) {
+    if ( snet_hasdata( sn )) {
 #ifndef min
 #define min(a,b)	(((a)<(b))?(a):(b))
 #endif /* min */
-	    rc = min( sn->sn_rend - sn->sn_rcur, len );
-	    memcpy( buf, sn->sn_rcur, rc );
-	    sn->sn_rcur += rc;
-	    return( rc );
-	}
+	rc = min( sn->sn_rend - sn->sn_rcur, len );
+	memcpy( buf, sn->sn_rcur, rc );
+	sn->sn_rcur += rc;
+	return( rc );
     }
 
     return( snet_readread( sn, buf, len, tv ));

@@ -35,6 +35,7 @@ int	snet_writef ___P(( SNET *, char *, ... ));
 char	*snet_getline ___P(( SNET *, struct timeval * ));
 char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 		struct timeval * ));
+int	snet_hasdata ___P(( SNET * ));
 ssize_t	snet_read ___P(( SNET *, char *, size_t, struct timeval * ));
 ssize_t	snet_write ___P(( SNET *, char *, size_t, struct timeval * ));
 #ifdef TLS
