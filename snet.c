@@ -284,7 +284,11 @@ snet_write( sn, buf, len, tv )
     struct timeval	*tv;
 {
     if ( sn->sn_flag & SNET_TLS ) {
+#ifdef TLS
 	return( SSL_write( sn->sn_ssl, buf, len ));
+#else
+	return( -1 );
+#endif TLS
     } else {
 	return( write( snet_fd( sn ), buf, len ));
     }
@@ -341,7 +345,11 @@ snet_readread( sn, buf, len, tv )
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
+#ifdef TLS
 	rc = SSL_read( sn->sn_ssl, buf, len );
+#else TLS
+	rc = -1;
+#endif TLS
     } else {
 	rc = read( snet_fd( sn ), buf, len );
     }
