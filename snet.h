@@ -39,4 +39,4 @@ char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 int	snet_read ___P(( SNET *, char *, int, struct timeval * ));
 int	snet_write ___P(( SNET *, char *, int, struct timeval * ));
 int	snet_inittls ___P(( SNET *, int ));
-int	snet_starttls ___P(( SNET *, int ));
+char	*snet_starttls ___P(( SNET *, int ));

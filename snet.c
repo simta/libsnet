@@ -20,6 +20,7 @@
 
 #ifdef TLS
 #include <openssl/ssl.h>
+#include <openssl/err.h>
 #endif TLS
 
 
@@ -119,6 +120,7 @@ snet_inittls( sn, server )
     int			server;
 {
     SSL_library_init();
+    SSL_load_error_strings();
 
     if (( sn->sn_sslctx = SSL_CTX_new( server ? SSLv23_server_method() :
 	    SSLv23_client_method())) == NULL ) {
@@ -127,22 +129,28 @@ snet_inittls( sn, server )
     return( 0 );
 }
 
-    int
+    char *
 snet_starttls( sn, server )
     SNET		*sn;
     int			server;
 {
+    int			rc;
+
     if (( sn->sn_ssl = SSL_new( sn->sn_sslctx )) == NULL ) {
-	return( -1 );
+	return( "SSL_new" );
     }
     if ( SSL_set_fd( sn->sn_ssl, sn->sn_fd ) != 1 ) {
-	return( -1 );
+	return( "SSL_set_fd" );
     }
     if ( server ) {
-	return( SSL_accept( sn->sn_ssl ));
+	rc = SSL_accept( sn->sn_ssl );
     } else {
-	return( SSL_connect( sn->sn_ssl ));
+	rc = SSL_connect( sn->sn_ssl );
     }
+    if ( rc != 1 ) {
+	return( ERR_error_string( SSL_get_error( sn->sn_ssl, rc ), NULL ));
+    }
+    return( NULL );
 }
 #endif TLS
 
