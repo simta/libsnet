@@ -33,7 +33,8 @@ typedef struct {
 
 #define snet_fd( sn )	((sn)->sn_fd)
 #define snet_saslssf( sn )	((sn)->sn_saslssf)
-#define snet_writef( sn, format, ... )	(snet_writeftv((sn),NULL,(format), __VA_ARGS__ ))
+
+#define snet_writef( sn, ... )	snet_writeftv((sn),NULL, __VA_ARGS__ )
 
 int	snet_eof ___P(( SNET * ));
 SNET	*snet_attach ___P(( int, int ));
