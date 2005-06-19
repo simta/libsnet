@@ -203,10 +203,11 @@ snet_setsasl( sn, conn )
  */
     ssize_t
 #ifdef __STDC__
-snet_writef( SNET *sn, char *format, ... )
+snet_writeftv( SNET *sn, struct timeval *tv, char *format, ... )
 #else /* __STDC__ */
-snet_writef( sn, format, va_alist )
-    SNET			*sn;
+snet_writeftv( sn, tv, format, va_alist )
+    SNET		*sn;
+    struct timeval	*tv;
     char		*format;
     va_dcl
 #endif /* __STDC__ */
@@ -435,14 +436,60 @@ modifier:
 
     va_end( vl );
 
-    return( snet_write( sn, sn->sn_wbuf, cur - sn->sn_wbuf, 0 ));
+    return( snet_write( sn, sn->sn_wbuf, cur - sn->sn_wbuf, tv ));
 }
 
 /*
- * Should we set non-blocking IO?  Do we need to bother?
- * We'll leave tv in here now, so that we don't have to change the call
- * later.  It's currently ignored.
+ * select that updates the timeout structure.
+ *
+ * We could define snet_select to just be select on platforms that update
+ * the timeout structure.
  */
+    static int
+snet_select( int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
+	struct timeval *tv )
+{
+#ifndef linux
+    struct timeval	tv_begin, tv_end;
+#endif /* linux */
+    int			rc;
+
+#ifndef linux
+    if ( gettimeofday( &tv_begin, NULL ) < 0 ) {
+	return( -1 );
+    }
+#endif /* linux */
+
+    rc = select( nfds, rfds, wfds, wfds, tv );
+
+#ifndef linux
+    if ( gettimeofday( &tv_end, NULL ) < 0 ) {
+	return( -1 );
+    }
+
+    if ( tv_begin.tv_usec > tv_end.tv_usec ) {
+	tv_end.tv_usec += 1000000;
+	tv_end.tv_sec -= 1;
+    }
+    if (( tv->tv_usec -= ( tv_end.tv_usec - tv_begin.tv_usec )) < 0 ) {
+	tv->tv_usec += 1000000;
+	tv->tv_sec -= 1;
+    }
+
+    /*
+     * If we got negative, we don't generate an additional error.  Instead,
+     * we just zero tv and return whatever select() returned.  The caller
+     * must inspect the fd_sets to determine that nothing was set.
+     */
+    if (( tv->tv_sec -= ( tv_end.tv_sec - tv_begin.tv_sec )) < 0 ) {
+	tv->tv_sec = 0;
+	tv->tv_usec = 0;
+    }
+#endif /* linux */
+
+    return( rc );
+}
+
     ssize_t
 snet_write( sn, buf, len, tv )
     SNET		*sn;
@@ -450,6 +497,10 @@ snet_write( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
+    fd_set		fds;
+    int			rc, oflags;
+    size_t		rlen = 0;
+
 #ifdef HAVE_LIBSASL
     if (( sn->sn_flag & SNET_SASL ) && ( sn->sn_saslssf )) {
 	const char		*ebuf;
@@ -464,15 +515,100 @@ snet_write( sn, buf, len, tv )
     }
 #endif /* HAVE_LIBSASL */
 
-    if ( sn->sn_flag & SNET_TLS ) {
+    if ( tv == NULL ) {
+	if ( sn->sn_flag & SNET_TLS ) {
 #ifdef HAVE_LIBSSL
-	return( SSL_write( sn->sn_ssl, buf, len ));
+	    /*
+	     * Make sure we're not allowing partial writes.
+	     */
+	    SSL_set_mode( sn->sn_ssl, SSL_get_mode( sn->sn_ssl ) &
+		    ~SSL_MODE_ENABLE_PARTIAL_WRITE );
+	    return( SSL_write( sn->sn_ssl, buf, len ));
 #else
-	return( -1 );
+	    return( -1 );
 #endif /* HAVE_LIBSSL */
-    } else {
-	return( write( snet_fd( sn ), buf, len ));
+	} else {
+	    return( write( snet_fd( sn ), buf, len ));
+	}
     }
+
+    if (( oflags = fcntl( snet_fd( sn ), F_GETFL )) < 0 ) {
+	return( -1 );
+    }
+    if (( oflags & O_NONBLOCK ) == 0 ) {
+	if ( fcntl( snet_fd( sn ), F_SETFL, oflags | O_NONBLOCK ) < 0 ) {
+	    return( -1 );
+	}
+    }
+
+    while ( len > 0 ) {
+	FD_ZERO( &fds );
+	FD_SET( snet_fd( sn ), &fds );
+
+	/* time out case? */
+	if ( snet_select( snet_fd( sn ) + 1, NULL, &fds, NULL, tv ) < 0 ) {
+	    return( -1 );
+	}
+	if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
+	    errno = ETIMEDOUT;
+	    return( -1 );
+	}
+
+	if ( sn->sn_flag & SNET_TLS ) {
+#ifdef HAVE_LIBSSL
+	    /*
+	     * Make sure we ARE allowing partial writes.
+	     */
+	    SSL_set_mode( sn->sn_ssl, SSL_MODE_ENABLE_PARTIAL_WRITE );
+
+	    if (( rc = SSL_write( sn->sn_ssl, buf, len )) <= 0 ) {
+		switch ( SSL_get_error( sn->sn_ssl, rc )) {
+		case SSL_ERROR_WANT_READ :
+		    FD_ZERO( &fds );
+		    FD_SET( snet_fd( sn ), &fds );
+
+		    if ( snet_select( snet_fd( sn ) + 1,
+			    &fds, NULL, NULL, tv ) < 0 ) {
+			return( -1 );
+		    }
+		    if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
+			errno = ETIMEDOUT;
+			return( -1 );
+		    }
+		    continue;
+
+		case SSL_ERROR_WANT_WRITE :
+		    continue;
+
+		default :
+		    return( -1 );
+		}
+	    }
+#else
+	    return( -1 );
+#endif /* HAVE_LIBSSL */
+	} else {
+	    rc = write( snet_fd( sn ), buf, len );
+	}
+
+	if ( rc < 0 ) {
+	    if ( errno == EAGAIN ) {
+		continue;
+	    }
+	    return( rc );
+	}
+
+	buf += rc;
+	rlen += rc;
+	len -= rc;
+    }
+
+    if (( oflags & O_NONBLOCK ) == 0 ) {
+	if ( fcntl( snet_fd( sn ), F_SETFL, oflags ) < 0 ) {
+	    return( -1 );
+	}
+    }
+    return( rlen );
 }
 
     static ssize_t
@@ -482,9 +618,6 @@ snet_readread( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
-#ifndef linux
-    struct timeval	tv_begin, tv_end;
-#endif /* linux */
     fd_set		fds;
     ssize_t		rc;
     extern int		errno;
@@ -492,11 +625,7 @@ snet_readread( sn, buf, len, tv )
     if ( tv ) {
 	FD_ZERO( &fds );
 	FD_SET( snet_fd( sn ), &fds );
-#ifndef linux
-	if ( gettimeofday( &tv_begin, NULL ) < 0 ) {
-	    return( -1 );
-	}
-#endif /* linux */
+
 	/* time out case? */
 	if ( select( snet_fd( sn ) + 1, &fds, NULL, NULL, tv ) < 0 ) {
 	    return( -1 );
@@ -505,28 +634,17 @@ snet_readread( sn, buf, len, tv )
 	    errno = ETIMEDOUT;
 	    return( -1 );
 	}
-#ifndef linux
-	if ( gettimeofday( &tv_end, NULL ) < 0 ) {
-	    return( -1 );
-	}
-
-	if ( tv_begin.tv_usec > tv_end.tv_usec ) {
-	    tv_end.tv_usec += 1000000;
-	    tv_end.tv_sec -= 1;
-	}
-	if (( tv->tv_usec -= ( tv_end.tv_usec - tv_begin.tv_usec )) < 0 ) {
-	    tv->tv_usec += 1000000;
-	    tv->tv_sec -= 1;
-	}
-	if (( tv->tv_sec -= ( tv_end.tv_sec - tv_begin.tv_sec )) < 0 ) {
-	    errno = ETIMEDOUT;
-	    return( -1 );
-	}
-#endif /* linux */
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
 #ifdef HAVE_LIBSSL
+	/*
+	 * First, all of the SSL IO calls can return SSL_ERROR_WANT_READ
+	 * and SSL_ERROR_WANT_WRITE.  See SSL_CTX_set_mode() for various ways
+	 * to deal with this issue.  Second, note SSL_MODE_ENABLE_PARTIAL_WRITE
+	 * and SSL_MODE_AUTO_RETRY for possible ways to deal with these
+	 * differences in call semantics.
+	 */
 	rc = SSL_read( sn->sn_ssl, buf, len );
 #else /* HAVE_LIBSSL */
 	rc = -1;

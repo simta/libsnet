@@ -33,12 +33,13 @@ typedef struct {
 
 #define snet_fd( sn )	((sn)->sn_fd)
 #define snet_saslssf( sn )	((sn)->sn_saslssf)
+#define snet_writef( sn, format, ... )	(snet_writeftv((sn),NULL,(format), __VA_ARGS__ ))
 
 int	snet_eof ___P(( SNET * ));
 SNET	*snet_attach ___P(( int, int ));
 SNET	*snet_open ___P(( char *, int, int, int ));
 int	snet_close ___P(( SNET * ));
-ssize_t	snet_writef ___P(( SNET *, char *, ... ));
+ssize_t	snet_writeftv ___P(( SNET *, struct timeval *, char *, ... ));
 char	*snet_getline ___P(( SNET *, struct timeval * ));
 char	*snet_getline_multi ___P(( SNET *, void (*)(char *),
 		struct timeval * ));
