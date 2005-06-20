@@ -46,12 +46,6 @@
 #define SNET_FUZZY	1
 #define SNET_IN		2
 
-#define SNET_EOF	(1<<0)
-#define SNET_TLS	(1<<1)
-#ifdef HAVE_LIBSASL
-#define SNET_SASL	(1<<2)
-#endif /* HAVE_LIBSASL */
-
 static ssize_t snet_readread ___P(( SNET *, char *, size_t, struct timeval * ));
 
 /*
@@ -59,8 +53,7 @@ static ssize_t snet_readread ___P(( SNET *, char *, size_t, struct timeval * ));
  * between NULL => EOF and NULL => connection dropped (or some other error).
  */
     int
-snet_eof( sn )
-    SNET		*sn;
+snet_eof( SNET *sn )
 {
     return ( sn->sn_flag & SNET_EOF );
 }
@@ -112,8 +105,7 @@ snet_open( path, flags, mode, max )
 }
 
     int
-snet_close( sn )
-    SNET		*sn;
+snet_close( SNET *sn )
 {
     int			fd;
 
@@ -125,6 +117,20 @@ snet_close( sn )
 	return( -1 );
     }
     return( 0 );
+}
+
+    void
+snet_timeout( SNET *sn, int flag, struct timeval *tv )
+{
+    if ( flag & SNET_READ_TIMEOUT ) {
+	sn->sn_flag |= SNET_READ_TIMEOUT;
+	sn->sn_read_timeout = *tv;
+    }
+    if ( flag & SNET_WRITE_TIMEOUT ) {
+	sn->sn_flag |= SNET_WRITE_TIMEOUT;
+	sn->sn_write_timeout = *tv;
+    }
+    return;
 }
 
 #ifdef HAVE_LIBSSL
@@ -477,7 +483,7 @@ snet_select( int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
     }
 
     /*
-     * If we got negative, we don't generate an additional error.  Instead,
+     * If we've gone negative, we don't generate an additional error.  Instead,
      * we just zero tv and return whatever select() returned.  The caller
      * must inspect the fd_sets to determine that nothing was set.
      */
@@ -500,6 +506,7 @@ snet_write( sn, buf, len, tv )
     fd_set		fds;
     int			rc, oflags;
     size_t		rlen = 0;
+    struct timeval	default_tv;
 
 #ifdef HAVE_LIBSASL
     if (( sn->sn_flag & SNET_SASL ) && ( sn->sn_saslssf )) {
@@ -515,14 +522,18 @@ snet_write( sn, buf, len, tv )
     }
 #endif /* HAVE_LIBSASL */
 
+    if (( tv == NULL ) && ( sn->sn_flag & SNET_WRITE_TIMEOUT )) {
+	default_tv = sn->sn_write_timeout;
+	tv = &default_tv;
+    }
+
     if ( tv == NULL ) {
 	if ( sn->sn_flag & SNET_TLS ) {
 #ifdef HAVE_LIBSSL
 	    /*
-	     * Make sure we're not allowing partial writes.
+	     * If SSL_MODE_ENABLE_PARTIAL_WRITE has been set, this routine
+	     * can (abnormally) return less than a full write.
 	     */
-	    SSL_set_mode( sn->sn_ssl, SSL_get_mode( sn->sn_ssl ) &
-		    ~SSL_MODE_ENABLE_PARTIAL_WRITE );
 	    return( SSL_write( sn->sn_ssl, buf, len ));
 #else
 	    return( -1 );
@@ -545,7 +556,6 @@ snet_write( sn, buf, len, tv )
 	FD_ZERO( &fds );
 	FD_SET( snet_fd( sn ), &fds );
 
-	/* time out case? */
 	if ( snet_select( snet_fd( sn ) + 1, NULL, &fds, NULL, tv ) < 0 ) {
 	    return( -1 );
 	}
@@ -557,7 +567,8 @@ snet_write( sn, buf, len, tv )
 	if ( sn->sn_flag & SNET_TLS ) {
 #ifdef HAVE_LIBSSL
 	    /*
-	     * Make sure we ARE allowing partial writes.
+	     * Make sure we ARE allowing partial writes.  This can't
+	     * be turned off!!!
 	     */
 	    SSL_set_mode( sn->sn_ssl, SSL_MODE_ENABLE_PARTIAL_WRITE );
 
@@ -575,7 +586,6 @@ snet_write( sn, buf, len, tv )
 			errno = ETIMEDOUT;
 			return( -1 );
 		    }
-		    continue;
 
 		case SSL_ERROR_WANT_WRITE :
 		    continue;
@@ -588,14 +598,12 @@ snet_write( sn, buf, len, tv )
 	    return( -1 );
 #endif /* HAVE_LIBSSL */
 	} else {
-	    rc = write( snet_fd( sn ), buf, len );
-	}
-
-	if ( rc < 0 ) {
-	    if ( errno == EAGAIN ) {
-		continue;
+	    if (( rc = write( snet_fd( sn ), buf, len )) < 0 ) {
+		if ( errno == EAGAIN ) {
+		    continue;
+		}
+		return( rc );
 	    }
-	    return( rc );
 	}
 
 	buf += rc;
@@ -620,7 +628,13 @@ snet_readread( sn, buf, len, tv )
 {
     fd_set		fds;
     ssize_t		rc;
+    struct timeval	default_tv;
     extern int		errno;
+
+    if (( tv == NULL ) && ( sn->sn_flag & SNET_READ_TIMEOUT )) {
+	default_tv = sn->sn_read_timeout;
+	tv = &default_tv;
+    }
 
     if ( tv ) {
 	FD_ZERO( &fds );
