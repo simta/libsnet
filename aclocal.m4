@@ -114,14 +114,14 @@ AC_DEFUN([CHECK_SASL],
 		break
 	    fi
 	done
-	if test x_$found_sasl != x_yes; then
-	    AC_MSG_ERROR(cannot find sasl libraries)
-	else
+	if test x_$found_sasl == x_yes; then
 	    AC_DEFINE(HAVE_LIBSASL)
 	    LIBS="$LIBS -lsasl2";
 	    LDFLAGS="$LDFLAGS -L$sasldir/lib";
+	    AC_MSG_RESULT(yes)
+	else
+	    AC_MSG_RESULT(no)
 	fi
-	AC_MSG_RESULT(yes)
     else
 	AC_MSG_RESULT(no)
     fi
