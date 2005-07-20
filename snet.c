@@ -630,13 +630,19 @@ snet_readread( sn, buf, len, tv )
     ssize_t		rc;
     struct timeval	default_tv;
     extern int		errno;
+    int			haveinput = 0;
 
     if (( tv == NULL ) && ( sn->sn_flag & SNET_READ_TIMEOUT )) {
 	default_tv = sn->sn_read_timeout;
 	tv = &default_tv;
     }
 
-    if ( tv ) {
+    if ( sn->sn_flag* & SNET_TLS ) {
+	/* Check to see if there is already data in SSL buffer */
+	haveinput = SSL_pending( sn->sn_ssl );
+    }
+
+    if ( haveinput && tv ) {
 	FD_ZERO( &fds );
 	FD_SET( snet_fd( sn ), &fds );
 
