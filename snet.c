@@ -643,7 +643,7 @@ snet_readread( sn, buf, len, tv )
 	haveinput = SSL_pending( sn->sn_ssl );
     }
 
-    if ( haveinput && tv ) {
+    if ( !haveinput && tv ) {
 	FD_ZERO( &fds );
 	FD_SET( snet_fd( sn ), &fds );
 
