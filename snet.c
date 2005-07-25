@@ -638,7 +638,7 @@ snet_readread( sn, buf, len, tv )
 	tv = &default_tv;
     }
 
-    if ( sn->sn_flag && SNET_TLS ) {
+    if ( sn->sn_flag & SNET_TLS ) {
 	/* Check to see if there is already data in SSL buffer */
 	haveinput = SSL_pending( sn->sn_ssl );
     }
