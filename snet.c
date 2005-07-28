@@ -639,8 +639,10 @@ snet_readread( sn, buf, len, tv )
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
+#ifdef HAVE_LIBSSL
 	/* Check to see if there is already data in SSL buffer */
 	haveinput = SSL_pending( sn->sn_ssl );
+#endif /* HAVE_LIBSSL */
     }
 
     if ( !haveinput && tv ) {
