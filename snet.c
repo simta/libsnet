@@ -639,12 +639,11 @@ snet_readread( sn, buf, len, tv )
     }
 
     if ( tv ) {
+	dontblock = 1;
 #ifdef HAVE_LIBSSL
 	/* Check to see if there is already data in SSL buffer */
 	if ( sn->sn_flag & SNET_TLS ) {
 	    dontblock = ! SSL_pending( sn->sn_ssl );
-	} else {
-	    dontblock = 1;
 	}
 #endif /* HAVE_LIBSSL */
     }
