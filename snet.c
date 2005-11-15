@@ -631,21 +631,35 @@ snet_readread( sn, buf, len, tv )
     ssize_t		rc;
     struct timeval	default_tv;
     extern int		errno;
-    int			haveinput = 0;
+    int			oflags, dontblock = 0;
 
     if (( tv == NULL ) && ( sn->sn_flag & SNET_READ_TIMEOUT )) {
 	default_tv = sn->sn_read_timeout;
 	tv = &default_tv;
     }
 
-    if ( sn->sn_flag & SNET_TLS ) {
+    if ( tv ) {
 #ifdef HAVE_LIBSSL
 	/* Check to see if there is already data in SSL buffer */
-	haveinput = SSL_pending( sn->sn_ssl );
+	if ( sn->sn_flag & SNET_TLS ) {
+	    dontblock = ! SSL_pending( sn->sn_ssl );
+	} else {
+	    dontblock = 1;
+	}
 #endif /* HAVE_LIBSSL */
     }
 
-    if ( !haveinput && tv ) {
+    if ( dontblock ) {
+	if (( oflags = fcntl( snet_fd( sn ), F_GETFL )) < 0 ) {
+	    return( -1 );
+	}
+	if (( oflags & O_NONBLOCK ) == 0 ) {
+	    if (( fcntl( snet_fd( sn ), F_SETFL, oflags | O_NONBLOCK )) < 0 ) {
+		return( -1 );
+	    }
+	}
+
+retry:
 	FD_ZERO( &fds );
 	FD_SET( snet_fd( sn ), &fds );
 
@@ -661,14 +675,28 @@ snet_readread( sn, buf, len, tv )
 
     if ( sn->sn_flag & SNET_TLS ) {
 #ifdef HAVE_LIBSSL
-	/*
-	 * First, all of the SSL IO calls can return SSL_ERROR_WANT_READ
-	 * and SSL_ERROR_WANT_WRITE.  See SSL_CTX_set_mode() for various ways
-	 * to deal with this issue.  Second, note SSL_MODE_ENABLE_PARTIAL_WRITE
-	 * and SSL_MODE_AUTO_RETRY for possible ways to deal with these
-	 * differences in call semantics.
-	 */
-	rc = SSL_read( sn->sn_ssl, buf, len );
+	if (( rc = SSL_read( sn->sn_ssl, buf, len )) < 0 ) {
+	    switch ( SSL_get_error( sn->sn_ssl, rc )) {
+	    case SSL_ERROR_WANT_WRITE :
+		FD_ZERO( &fds );
+		FD_SET( snet_fd( sn ), &fds );
+
+		if ( snet_select( snet_fd( sn ) + 1,
+			NULL, &fds, NULL, tv ) < 0 ) {
+		    return( -1 );
+		}
+		if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
+		    errno == ETIMEDOUT;
+		    return( -1 );
+		}
+
+	    case SSL_ERROR_WANT_READ :
+		goto retry;
+
+	    default :
+		return( -1 );
+	    }
+	}
 #else /* HAVE_LIBSSL */
 	rc = -1;
 #endif /* HAVE_LIBSSL */
@@ -677,6 +705,12 @@ snet_readread( sn, buf, len, tv )
     }
     if ( rc == 0 ) {
 	sn->sn_flag = SNET_EOF;
+    }
+
+    if ( dontblock && (( oflags & O_NONBLOCK ) == 0 )) {
+	if (( fcntl( snet_fd( sn ), F_SETFL, oflags )) < 0 ) {
+	    return( -1 );
+	}
     }
 
 #ifdef HAVE_LIBSASL
