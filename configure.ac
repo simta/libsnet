@@ -10,6 +10,8 @@ AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_INSTALL
 
+CHECK_ZLIB
+
 # Checks for libraries.
 if test \! x_$with_ssl = x_no; then
     AC_CHECK_LIB([ssl], [SSL_accept], , [CHECK_SSL])

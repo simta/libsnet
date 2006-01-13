@@ -15,6 +15,9 @@
         esac */     
 #undef _FILE_OFFSET_BITS
 
+/* Define if you have the zlib library (-lz). */
+#undef HAVE_ZLIB
+
 #undef HAVE_LIBSSL
 
 /* Define to 1 if you have the `sasl' library (-lsasl2). */

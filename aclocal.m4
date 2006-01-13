@@ -75,6 +75,39 @@ AC_DEFUN([CHECK_ZEROCONF],
     fi
 ])
 
+AC_DEFUN([CHECK_ZLIB],
+[
+    AC_MSG_CHECKING(for zlib)
+    zlibdirs="/usr /usr/local"
+	withval=""
+    AC_ARG_WITH(zlib,
+            [AC_HELP_STRING([--with-zlib=DIR], [path to zlib])],
+            [])
+    if test x_$withval != x_no; then
+	if test x_$withval != x_yes -a \! -z "$withval"; then
+		zlibdirs="$answer"
+	fi
+	for dir in $zlibdirs; do
+	    zlibdir="$dir"
+	    if test -f "$dir/include/zlib.h"; then
+			found_zlib="yes";
+			break;
+		fi
+	done
+	if test x_$found_zlib == x_yes; then
+		if test "$dir" != "/usr"; then
+			CPPFLAGS="$CPPFLAGS -I$zlibdir/include";
+	    fi
+	    AC_DEFINE(HAVE_ZLIB)
+	    AC_MSG_RESULT(yes)
+	else
+	    AC_MSG_RESULT(no)
+	fi
+    else
+	AC_MSG_RESULT(no)
+    fi
+])
+
 AC_DEFUN([CHECK_PROFILED],
 [
     # Allow user to control whether or not profiled libraries are built

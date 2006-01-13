@@ -21,6 +21,10 @@
 
 #include <netinet/in.h>
 
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif /* HAVE_ZLIB */
+
 #ifdef HAVE_LIBSSL
 #include <openssl/ssl.h>
 #endif /* HAVE_LIBSSL */
@@ -47,7 +51,9 @@
 #define SNET_FUZZY	1
 #define SNET_IN		2
 
-static ssize_t snet_readread ___P(( SNET *, char *, size_t, struct timeval * ));
+static ssize_t snet_read0 ___P(( SNET *, char *, size_t, struct timeval * ));
+static ssize_t snet_read1 ___P(( SNET *, char *, size_t, struct timeval * ));
+static ssize_t snet_write0 ___P(( SNET *, char *, size_t, struct timeval * ));
 
 /*
  * This routine is necessary, since snet_getline() doesn't differentiate
@@ -497,8 +503,8 @@ snet_select( int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
     return( rc );
 }
 
-    ssize_t
-snet_write( sn, buf, len, tv )
+    static ssize_t
+snet_write0( sn, buf, len, tv )
     SNET		*sn;
     char		*buf;
     size_t		len;
@@ -620,8 +626,140 @@ snet_write( sn, buf, len, tv )
     return( rlen );
 }
 
+/* Start compression on the link. "opt" allows option parameters to be set
+ * for the compression chosen by "type".
+ *
+ * Returns -1 for error, 0 in other cases
+ */
+    int
+snet_setcompression( sn, type, level )
+    SNET        *sn;
+    int          type;
+    int          level;
+{
+    if ( sn->sn_flag & SNET_ZLIB ) {
+	return( -1 );
+    }
+
+    if ( type != SNET_ZLIB ) {
+	return( -1 );
+    }
+
+#ifdef HAVE_ZLIB
+    memset( &sn->sn_zistream, 0, sizeof( sn->sn_zistream ));
+    if ( inflateInit( &sn->sn_zistream ) != Z_OK ) {
+	return( -1 );
+    }
+
+    memset( &sn->sn_zostream, 0, sizeof( sn->sn_zostream ));
+    if ( deflateInit( &sn->sn_zostream, level ) != Z_OK ) {
+	return( -1 );
+    }
+
+    if (( sn->sn_cibuf = malloc( SNET_BUFLEN )) == NULL ) {
+	return( -1 );
+    }
+    if (( sn->sn_cobuf = malloc( SNET_BUFLEN )) == NULL ) {
+	free( sn->sn_cibuf );
+	return( -1 );
+    }
+
+    sn->sn_zistream.next_in = (unsigned char *)sn->sn_cibuf;
+    sn->sn_zistream.avail_in = 0;
+    sn->sn_zostream.next_out = (unsigned char *)sn->sn_cobuf;
+    sn->sn_zostream.avail_out = SNET_BUFLEN;
+
+    sn->sn_flag |= type;
+    return( 0 );
+
+#else /* HAVE_ZLIB */
+    return( -1 );
+#endif /* HAVE_ZLIB */
+}
+
     static ssize_t
-snet_readread( sn, buf, len, tv )
+snet_read0( sn, buf, len, tv )
+    SNET		*sn;
+    char		*buf;
+    size_t		len;
+    struct timeval	*tv;
+{
+    ssize_t rr;
+
+    if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
+	return snet_read1( sn, buf, len, tv );
+    }
+
+#ifdef HAVE_ZLIB
+    sn->sn_zistream.avail_out = len;
+    sn->sn_zistream.next_out  = (unsigned char *)buf;
+
+    do {
+	if ( sn->sn_zistream.avail_in == 0 ) {
+	    if (( rr = snet_read1( sn,
+		    sn->sn_cibuf, sizeof( sn->sn_cibuf ), tv )) < 0) {
+		return( -1 );
+	    }
+	    if ( rr == 0 ) {
+		break; /* EOF */
+	    }
+	    sn->sn_zistream.avail_in = rr;
+	    sn->sn_zistream.next_in  = (unsigned char *)sn->sn_cibuf;
+	}
+	if ( inflate(&sn->sn_zistream, Z_SYNC_FLUSH) != Z_OK ) {
+	    return( -1 );
+	}
+    } while ( sn->sn_zistream.avail_out == len );
+    return( len - sn->sn_zistream.avail_out );
+
+#else /* HAVE_ZLIB */
+    return( -1 );
+#endif /* HAVE_ZLIB */
+}
+
+    ssize_t
+snet_write( sn, buf, len, tv )
+    SNET		*sn;
+    char		*buf;
+    size_t		len;
+    struct timeval	*tv;
+{
+    size_t  zlen;
+
+    if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
+	return snet_write0( sn, buf, len, tv );
+    }
+
+#ifdef HAVE_ZLIB
+    sn->sn_zostream.avail_in = len;
+    sn->sn_zostream.next_in  = (unsigned char *)buf;
+
+    /* Continue until buf is at end */
+    while ( sn->sn_zostream.avail_in > 0 ) {
+	if ( deflate( &sn->sn_zostream, Z_SYNC_FLUSH ) != Z_OK ) {
+	    /* ZZZ */
+	    return( -1 );
+	}
+
+	zlen = sizeof( sn->sn_cobuf ) - sn->sn_zostream.avail_out;
+	if ( zlen > 0 ) {
+	    if ( snet_write0( sn, sn->sn_cobuf, zlen, tv ) != zlen ) {
+		/* ZZZ */
+		return( -1 );
+	    }
+	    sn->sn_zostream.avail_out = sizeof( sn->sn_cobuf );
+	    sn->sn_zostream.next_out  = (unsigned char *)sn->sn_cobuf;
+	}
+    }
+    return( len );
+#else /* HAVE_ZLIB */
+
+    return( -1 );
+#endif /* HAVE_ZLIB */
+}
+
+    static ssize_t
+snet_read1( sn, buf, len, tv )
     SNET		*sn;
     char		*buf;
     size_t		len;
@@ -767,7 +905,7 @@ snet_read( sn, buf, len, tv )
     /*
      * If there's data already buffered, make sure it's not left over
      * from snet_getline(), and then return whatever's left.
-     * Note that snet_getline() calls snet_readread().
+     * Note that snet_getline() calls snet_read0().
      */
     if ( snet_hasdata( sn )) {
 #ifndef min
@@ -779,12 +917,12 @@ snet_read( sn, buf, len, tv )
 	return( rc );
     }
 
-    rc = snet_readread( sn, buf, len, tv );
+    rc = snet_read0( sn, buf, len, tv );
     if (( rc > 0 ) && ( sn->sn_rstate == SNET_FUZZY )) {
 	sn->sn_rstate = SNET_BOL;
 	if ( *buf == '\n' ) {
 	    if ( --rc <= 0 ) {
-		rc = snet_readread( sn, buf, len, tv );
+		rc = snet_read0( sn, buf, len, tv );
 	    } else {
 		memmove( buf, buf + 1, rc );
 	    }
@@ -835,7 +973,7 @@ snet_getline( sn, tv )
 		sn->sn_rcur = sn->sn_rbuf;
 	    }
 
-	    if (( rc = snet_readread( sn, sn->sn_rend,
+	    if (( rc = snet_read0( sn, sn->sn_rend,
 		    sn->sn_rbuflen - ( sn->sn_rend - sn->sn_rbuf ),
 		    tv )) < 0 ) {
 		return( NULL );

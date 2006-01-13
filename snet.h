@@ -22,6 +22,14 @@ typedef struct {
     int			sn_flag;
     struct timeval	sn_read_timeout;
     struct timeval	sn_write_timeout;
+
+#ifdef HAVE_ZLIB
+    z_stream		sn_zistream;
+    z_stream		sn_zostream;
+    char		*sn_cibuf;
+    char		*sn_cobuf;
+#endif /* HAVE_ZLIB */
+
 #ifdef HAVE_LIBSSL
     void		*sn_ssl;
 #endif /* HAVE_LIBSSL */
@@ -41,6 +49,8 @@ typedef struct {
 #define SNET_WRITE_TIMEOUT	(1<<3)
 #define SNET_READ_TIMEOUT	(1<<4)
 
+#define SNET_ZLIB		(1<<5)
+
 #define snet_fd( sn )	((sn)->sn_fd)
 #define snet_saslssf( sn )	((sn)->sn_saslssf)
 
@@ -58,9 +68,10 @@ void	snet_timeout ___P(( SNET *, int, struct timeval * ));
 int	snet_hasdata ___P(( SNET * ));
 ssize_t	snet_read ___P(( SNET *, char *, size_t, struct timeval * ));
 ssize_t	snet_write ___P(( SNET *, char *, size_t, struct timeval * ));
+int	snet_setcompression( SNET *, int, int );
 #ifdef HAVE_LIBSSL
 int	snet_starttls ___P(( SNET *, SSL_CTX *, int ));
-#endif /* HAVE_LIBSSL */
+#endif
 #ifdef HAVE_LIBSASL
 int	snet_setsasl  ___P(( SNET *, sasl_conn_t * ));
-#endif /* HAVE_LIBSASL */
+#endif
