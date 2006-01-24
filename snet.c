@@ -633,13 +633,16 @@ snet_write0( sn, buf, len, tv )
  */
     int
 snet_setcompression( sn, type, level )
-    SNET        *sn;
-    int          type;
-    int          level;
+    SNET	*sn;
+    int		type;
+    int		level;
 {
+    int		len = 0;
+
     if ( sn->sn_flag & SNET_ZLIB ) {
 	return( -1 );
     }
+    sn->sn_flag |= SNET_ZLIB;
 
     if ( type != SNET_ZLIB ) {
 	return( -1 );
@@ -656,18 +659,26 @@ snet_setcompression( sn, type, level )
 	return( -1 );
     }
 
-    if (( sn->sn_cibuf = malloc( SNET_BUFLEN )) == NULL ) {
-	return( -1 );
+    if ( snet_hasdata( sn )) {
+	len = sn->sn_rend - sn->sn_rcur;
     }
-    if (( sn->sn_cobuf = malloc( SNET_BUFLEN )) == NULL ) {
-	free( sn->sn_cibuf );
+	
+#ifndef max
+#define max(a,b)	(((a)<(b))?(b):(a))
+#endif /* max */
+    sn->sn_zbuflen = max( SNET_BUFLEN, len );
+    if (( sn->sn_zbuf = malloc( sn->sn_zbuflen )) == NULL ) {
 	return( -1 );
     }
 
-    sn->sn_zistream.next_in = (unsigned char *)sn->sn_cibuf;
-    sn->sn_zistream.avail_in = 0;
-    sn->sn_zostream.next_out = (unsigned char *)sn->sn_cobuf;
-    sn->sn_zostream.avail_out = SNET_BUFLEN;
+    sn->sn_zistream.next_in = (unsigned char *)sn->sn_zbuf;
+    if ( len ) {
+	memcpy( sn->sn_zbuf, sn->sn_rcur, len );
+	sn->sn_zistream.avail_in = len;
+	sn->sn_rcur = sn->sn_rend = sn->sn_rbuf;
+    } else {
+	sn->sn_zistream.avail_in = 0;
+    }
 
     sn->sn_flag |= type;
     return( 0 );
@@ -696,17 +707,16 @@ snet_read0( sn, buf, len, tv )
 
     do {
 	if ( sn->sn_zistream.avail_in == 0 ) {
-	    if (( rr = snet_read1( sn,
-		    sn->sn_cibuf, sizeof( sn->sn_cibuf ), tv )) < 0) {
+	    if (( rr = snet_read1( sn, sn->sn_zbuf, sn->sn_zbuflen, tv )) < 0) {
 		return( -1 );
 	    }
 	    if ( rr == 0 ) {
 		break; /* EOF */
 	    }
 	    sn->sn_zistream.avail_in = rr;
-	    sn->sn_zistream.next_in  = (unsigned char *)sn->sn_cibuf;
+	    sn->sn_zistream.next_in = (unsigned char *)sn->sn_zbuf;
 	}
-	if ( inflate(&sn->sn_zistream, Z_SYNC_FLUSH) != Z_OK ) {
+	if ( inflate( &sn->sn_zistream, Z_SYNC_FLUSH ) != Z_OK ) {
 	    return( -1 );
 	}
     } while ( sn->sn_zistream.avail_out == len );
@@ -724,33 +734,36 @@ snet_write( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
-    size_t  zlen;
+    char		cobuf[ SNET_BUFLEN ];
+    size_t		zlen;
 
     if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
 	return snet_write0( sn, buf, len, tv );
     }
 
 #ifdef HAVE_ZLIB
+    /* XXX What if len == 0 ? */
     sn->sn_zostream.avail_in = len;
     sn->sn_zostream.next_in  = (unsigned char *)buf;
 
     /* Continue until buf is at end */
-    while ( sn->sn_zostream.avail_in > 0 ) {
+    do {
+	sn->sn_zostream.avail_out = SNET_BUFLEN;
+	sn->sn_zostream.next_out = (unsigned char *)cobuf;
+
 	if ( deflate( &sn->sn_zostream, Z_SYNC_FLUSH ) != Z_OK ) {
 	    /* ZZZ */
 	    return( -1 );
 	}
 
-	zlen = sizeof( sn->sn_cobuf ) - sn->sn_zostream.avail_out;
+	zlen = SNET_BUFLEN - sn->sn_zostream.avail_out;
 	if ( zlen > 0 ) {
-	    if ( snet_write0( sn, sn->sn_cobuf, zlen, tv ) != zlen ) {
+	    if ( snet_write0( sn, cobuf, zlen, tv ) != zlen ) {
 		/* ZZZ */
 		return( -1 );
 	    }
-	    sn->sn_zostream.avail_out = sizeof( sn->sn_cobuf );
-	    sn->sn_zostream.next_out  = (unsigned char *)sn->sn_cobuf;
 	}
-    }
+    } while ( sn->sn_zostream.avail_in > 0 );
     return( len );
 #else /* HAVE_ZLIB */
 

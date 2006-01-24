@@ -26,8 +26,8 @@ typedef struct {
 #ifdef HAVE_ZLIB
     z_stream		sn_zistream;
     z_stream		sn_zostream;
-    char		*sn_cibuf;
-    char		*sn_cobuf;
+    char		*sn_zbuf;
+    int			sn_zbuflen;
 #endif /* HAVE_ZLIB */
 
 #ifdef HAVE_LIBSSL
@@ -53,6 +53,9 @@ typedef struct {
 
 #define snet_fd( sn )	((sn)->sn_fd)
 #define snet_saslssf( sn )	((sn)->sn_saslssf)
+#define snet_flags( sn )	((sn)->sn_flag)
+#define snet_zistream( sn )	((sn)->sn_zistream)
+#define snet_zostream( sn )	((sn)->sn_zostream)
 
 #define snet_writef( sn, ... )	snet_writeftv((sn),NULL, __VA_ARGS__ )
 
