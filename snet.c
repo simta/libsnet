@@ -836,7 +836,7 @@ retry:
 		    return( -1 );
 		}
 		if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
-		    errno == ETIMEDOUT;
+		    errno = ETIMEDOUT;
 		    return( -1 );
 		}
 
