@@ -734,7 +734,7 @@ snet_write( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
-    char		cobuf[ SNET_BUFLEN ];
+    char		cobuf[ 8192 ];
     size_t		zlen;
 
     if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
@@ -748,7 +748,7 @@ snet_write( sn, buf, len, tv )
 
     /* Continue until buf is at end */
     do {
-	sn->sn_zostream.avail_out = SNET_BUFLEN;
+	sn->sn_zostream.avail_out = sizeof( cobuf );
 	sn->sn_zostream.next_out = (unsigned char *)cobuf;
 
 	if ( deflate( &sn->sn_zostream, Z_SYNC_FLUSH ) != Z_OK ) {
@@ -756,14 +756,14 @@ snet_write( sn, buf, len, tv )
 	    return( -1 );
 	}
 
-	zlen = SNET_BUFLEN - sn->sn_zostream.avail_out;
+	zlen = sizeof( cobuf ) - sn->sn_zostream.avail_out;
 	if ( zlen > 0 ) {
 	    if ( snet_write0( sn, cobuf, zlen, tv ) != zlen ) {
 		/* ZZZ */
 		return( -1 );
 	    }
 	}
-    } while ( sn->sn_zostream.avail_in > 0 );
+    } while ( sn->sn_zostream.avail_in > 0 || sn->sn_zostream.avail_out == 0 );
     return( len );
 #else /* HAVE_ZLIB */
 
