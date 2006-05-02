@@ -564,11 +564,11 @@ snet_write0( sn, buf, len, tv )
 	FD_SET( snet_fd( sn ), &fds );
 
 	if ( snet_select( snet_fd( sn ) + 1, NULL, &fds, NULL, tv ) < 0 ) {
-	    return( -1 );
+	    goto restoreblocking;
 	}
 	if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
 	    errno = ETIMEDOUT;
-	    return( -1 );
+	    goto restoreblocking;
 	}
 
 	if ( sn->sn_flag & SNET_TLS ) {
@@ -587,29 +587,29 @@ snet_write0( sn, buf, len, tv )
 
 		    if ( snet_select( snet_fd( sn ) + 1,
 			    &fds, NULL, NULL, tv ) < 0 ) {
-			return( -1 );
+			goto restoreblocking;
 		    }
 		    if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
 			errno = ETIMEDOUT;
-			return( -1 );
+			goto restoreblocking;
 		    }
 
 		case SSL_ERROR_WANT_WRITE :
 		    continue;
 
 		default :
-		    return( -1 );
+		    goto restoreblocking;
 		}
 	    }
 #else
-	    return( -1 );
+	    goto restoreblocking;
 #endif /* HAVE_LIBSSL */
 	} else {
 	    if (( rc = write( snet_fd( sn ), buf, len )) < 0 ) {
 		if ( errno == EAGAIN ) {
 		    continue;
 		}
-		return( rc );
+		goto restoreblocking;
 	    }
 	}
 
@@ -624,6 +624,14 @@ snet_write0( sn, buf, len, tv )
 	}
     }
     return( rlen );
+
+restoreblocking:
+    if (( oflags & O_NONBLOCK ) == 0 ) {
+	if ( fcntl( snet_fd( sn ), F_SETFL, oflags ) < 0 ) {
+	    return( -1 );
+	}
+    }
+    return( -1 );
 }
 
 /* Start compression on the link. "opt" allows option parameters to be set
@@ -815,11 +823,11 @@ retry:
 
 	/* time out case? */
 	if ( select( snet_fd( sn ) + 1, &fds, NULL, NULL, tv ) < 0 ) {
-	    return( -1 );
+	    goto restoreblocking;
 	}
 	if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
 	    errno = ETIMEDOUT;
-	    return( -1 );
+	    goto restoreblocking;
 	}
     }
 
@@ -833,18 +841,18 @@ retry:
 
 		if ( snet_select( snet_fd( sn ) + 1,
 			NULL, &fds, NULL, tv ) < 0 ) {
-		    return( -1 );
+		    goto restoreblocking;
 		}
 		if ( FD_ISSET( snet_fd( sn ), &fds ) == 0 ) {
 		    errno = ETIMEDOUT;
-		    return( -1 );
+		    goto restoreblocking;
 		}
 
 	    case SSL_ERROR_WANT_READ :
 		goto retry;
 
 	    default :
-		return( -1 );
+		goto restoreblocking;
 	    }
 	}
 #else /* HAVE_LIBSSL */
@@ -882,6 +890,14 @@ retry:
 #endif /* HAVE_LIBSASL */
 
     return( rc );
+
+restoreblocking:
+    if ( dontblock && (( oflags & O_NONBLOCK ) == 0 )) {
+	if (( fcntl( snet_fd( sn ), F_SETFL, oflags )) < 0 ) {
+	    return( -1 );
+	}
+    }
+    return( -1 );
 }
 
     int
