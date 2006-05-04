@@ -645,7 +645,9 @@ snet_setcompression( sn, type, level )
     int		type;
     int		level;
 {
+#ifdef HAVE_ZLIB
     int		len = 0;
+#endif /* HAVE_ZLIB */
 
     if ( sn->sn_flag & SNET_ZLIB ) {
 	return( -1 );
@@ -703,7 +705,9 @@ snet_read0( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
+#ifdef HAVE_ZLIB
     ssize_t rr;
+#endif /* HAVE_ZLIB */
 
     if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
 	return snet_read1( sn, buf, len, tv );
@@ -742,8 +746,10 @@ snet_write( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
+#ifdef HAVE_ZLIB
     char		cobuf[ 8192 ];
     size_t		zlen;
+#endif /* HAVE_ZLIB */
 
     if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
 	return snet_write0( sn, buf, len, tv );
