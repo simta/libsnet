@@ -18,6 +18,7 @@ if test \! x_$with_ssl = x_no; then
     AC_CHECK_LIB([crypto], [SSLeay_version], , [CHECK_SSL])
 fi
 CHECK_SASL
+CHECK_UNIVERSAL_BINARIES
 
 # Checks for header files.
 #AC_HEADER_STDC
