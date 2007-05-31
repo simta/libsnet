@@ -85,7 +85,7 @@ AC_DEFUN([CHECK_ZLIB],
             [])
     if test x_$withval != x_no; then
 	if test x_$withval != x_yes -a \! -z "$withval"; then
-		zlibdirs="$answer"
+		zlibdirs="$withval"
 	fi
 	for dir in $zlibdirs; do
 	    zlibdir="$dir"
