@@ -94,7 +94,7 @@ AC_DEFUN([CHECK_ZLIB],
 			break;
 		fi
 	done
-	if test x_$found_zlib == x_yes; then
+	if test x_$found_zlib = x_yes; then
 		if test "$dir" != "/usr"; then
 			CPPFLAGS="$CPPFLAGS -I$zlibdir/include";
 	    fi
@@ -147,7 +147,7 @@ AC_DEFUN([CHECK_SASL],
 		break
 	    fi
 	done
-	if test x_$found_sasl == x_yes; then
+	if test x_$found_sasl = x_yes; then
 	    AC_DEFINE(HAVE_LIBSASL)
 	    LIBS="$LIBS -lsasl2";
 	    LDFLAGS="$LDFLAGS -L$sasldir/lib";
