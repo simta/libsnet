@@ -868,7 +868,7 @@ retry:
 	rc = read( snet_fd( sn ), buf, len );
     }
     if ( rc == 0 ) {
-	sn->sn_flag = SNET_EOF;
+	sn->sn_flag |= SNET_EOF;
     }
 
     if ( dontblock && (( oflags & O_NONBLOCK ) == 0 )) {
