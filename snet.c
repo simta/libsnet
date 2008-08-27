@@ -116,7 +116,7 @@ snet_close( SNET *sn )
 {
     int			fd;
 
-    fd = sn->sn_fd;
+    fd = snet_fd( sn );
     free( sn->sn_wbuf );
     free( sn->sn_rbuf );
     free( sn );
@@ -157,7 +157,7 @@ snet_starttls( sn, sslctx, sslaccept )
     if (( sn->sn_ssl = SSL_new( sslctx )) == NULL ) {
 	return( -1 );
     }
-    if (( rc = SSL_set_fd( sn->sn_ssl, sn->sn_fd )) != 1 ) {
+    if (( rc = SSL_set_fd( sn->sn_ssl, snet_fd( sn ))) != 1 ) {
 	return( rc );
     }
     if ( sslaccept ) {
@@ -274,8 +274,8 @@ modifier:
 		p = va_arg( vl, char * );
 		len = strlen( p );
 		SNET_WBUFGROW( len );
-		strcpy( cur, p );
-		cur += strlen( p );
+		memcpy( cur, p, len );
+		cur += len;
 		break;
 
 	    case 'c' :
@@ -345,7 +345,7 @@ modifier:
 
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
-		strncpy( cur, dbufoff, len );
+		memcpy( cur, dbufoff, len );
 		cur += len;
 		break;
 
@@ -374,7 +374,7 @@ modifier:
 
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
-		strncpy( cur, dbufoff, len );
+		memcpy( cur, dbufoff, len );
 		cur += len;
 		break;
 
@@ -404,7 +404,7 @@ modifier:
 
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
-		strncpy( cur, dbufoff, len );
+		memcpy( cur, dbufoff, len );
 		cur += len;
 		break;
 
@@ -434,7 +434,7 @@ modifier:
 
 		len = p - dbufoff;
 		SNET_WBUFGROW( len );
-		strncpy( cur, dbufoff, len );
+		memcpy( cur, dbufoff, len );
 		cur += len;
 		break;
 
