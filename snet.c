@@ -647,18 +647,15 @@ snet_setcompression( sn, type, level )
 {
 #ifdef HAVE_ZLIB
     int		len = 0;
-#endif /* HAVE_ZLIB */
 
     if ( sn->sn_flag & SNET_ZLIB ) {
 	return( -1 );
     }
-    sn->sn_flag |= SNET_ZLIB;
 
     if ( type != SNET_ZLIB ) {
 	return( -1 );
     }
 
-#ifdef HAVE_ZLIB
     memset( &sn->sn_zistream, 0, sizeof( sn->sn_zistream ));
     if ( inflateInit( &sn->sn_zistream ) != Z_OK ) {
 	return( -1 );
