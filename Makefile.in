@@ -78,7 +78,8 @@ clean:
 
 dist:		distclean
 	mkdir ${DISTDIR}
-	tar chfFFX - EXCLUDE . | ( cd ${DISTDIR}; tar xvf - )
+	#tar chfFFX - EXCLUDE . | ( cd ${DISTDIR}; tar xvf - )
+	tar -c -f - . | ( cd ${DISTDIR}; tar xvpf - -C ${DISTDIR} )
 	echo ${VERSION} > ${DISTDIR}/VERSION
 
 distclean:	clean
