@@ -195,3 +195,21 @@ AC_DEFUN([CHECK_UNIVERSAL_BINARIES],
 	OPTOPTS="$OPTOPTS -isysroot /Developer/SDKs/$macosx_sdk $dep_target $arches"
     fi
 ])
+
+AC_DEFUN([MACOSX_MUTE_DEPRECATION_WARNINGS],
+[
+    dnl Lion deprecates a system-provided OpenSSL. Build output
+    dnl is cluttered with useless deprecation warnings.
+
+    AS_IF([test x"$CC" = x"gcc"], [
+        case "${host_os}" in
+        darwin11*)
+            AC_MSG_NOTICE([muting deprecation warnings from compiler])
+            OPTOPTS="$OPTOPTS -Wno-deprecated-declarations"
+            ;;
+
+        *)
+            ;;
+        esac
+    ])
+])
