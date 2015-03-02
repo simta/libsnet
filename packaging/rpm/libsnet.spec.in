@@ -1,0 +1,64 @@
+# package options
+%define with_sasl2      yes
+
+Summary:        A simple TCP communications library
+Name:           @PACKAGE_NAME@
+Version:        @PACKAGE_VERSION@ 
+Release:        1%{?dist}
+License:        BSD
+Group:          System Environment/Libraries
+URL:            http://its.umich.edu/
+Source0:        %{name}-%{version}.tar.gz
+BuildRequires:  openssl-devel
+Requires:       openssl
+%if "%{with_sasl2}" == "yes"
+BuildRequires:  cyrus-sasl-devel
+Requires: %{_sbindir}/saslauthd
+%endif
+BuildRequires:  setup
+
+%description
+libsnet is a simple, secure TCP communications library with support for
+line & block IO, SSL, SASL, and ZLIB.
+
+%package        devel
+Summary:        Headers for libsnet
+Group:          Development/Libraries
+Requires:       %{name} = %{version}-%{release}
+
+%description    devel
+Headers for libsnet
+
+%prep
+%setup -q
+
+%build
+%configure \
+%if "%{with_sasl2}" != "yes"
+	--with-sasl=no \
+%endif
+	--with-zlib=no \
+        --enable-shared
+
+make %{?_smp_mflags} 
+
+%install
+rm -rf %{buildroot}
+make DESTDIR=%{buildroot} INSTALL_OPTS='' install
+
+%clean
+rm -rf %{buildroot}
+
+%files
+%defattr(-,root,root,-)
+%{_libdir}/libsnet.so*
+
+%files devel
+%defattr(-,root,root,-)
+%{_libdir}/libsnet.a
+%{_libdir}/libsnet.la
+%{_includedir}/snet.h
+
+%changelog
+* %(date "+%a %b %d %Y") (Automated RPM build) - %{version}-%{release}
+- See git log for actual changes.
