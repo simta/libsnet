@@ -1,3 +1,6 @@
+# Copyright (c) 2013-2015 Regents of The University of Michigan.
+# All Rights Reserved.  See COPYING.
+
 AC_DEFUN([AX_WITH_LIBRARY],
 [
     AC_ARG_WITH($1, AC_HELP_STRING([--with-$1=DIR], [$1 installation directory]))

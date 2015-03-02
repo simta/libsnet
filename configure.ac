@@ -2,7 +2,7 @@
 AC_INIT(libsnet, 1.1.0, rsug@umich.edu) 
 AM_INIT_AUTOMAKE([foreign])
 AC_PREREQ(2.52)
-AC_COPYRIGHT([Copyright (c) 1995-2003 Regents of The University of Michigan.  All Rights Reserved.])
+AC_COPYRIGHT([Copyright (c) 1995-2015 Regents of The University of Michigan])
 AC_CONFIG_HEADER(config.h)
 AC_CONFIG_SRCDIR([snet.c])
 AC_CONFIG_MACRO_DIR([m4])

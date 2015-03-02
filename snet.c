@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1995,2001 Regents of The University of Michigan.
- * All Rights Reserved.  See COPYRIGHT.
+ * Copyright (c) Regents of The University of Michigan
+ * See COPYING.
  */
 
 #include "config.h"
