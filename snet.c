@@ -136,7 +136,7 @@ snet_timeout( SNET *sn, int flag, struct timeval *tv )
     return;
 }
 
-#ifdef HAVE_LIBSSL
+#ifdef SNET_HAVE_LIBSSL
 /*
  * Returns 0 on success, and all further communication is through
  * the OpenSSL layer.  Returns -1 on failure, check the OpenSSL error
@@ -243,9 +243,9 @@ snet_starttls_tv( SNET *sn, SSL_CTX *sslctx, int sslaccept, struct timeval *tv )
 
     return( rc );
 }
-#endif /* HAVE_LIBSSL */
+#endif /* SNET_HAVE_LIBSSL */
 
-#ifdef HAVE_LIBSASL
+#ifdef SNET_HAVE_LIBSASL
     int
 snet_setsasl( sn, conn )
     SNET	*sn;
@@ -279,7 +279,7 @@ snet_setsasl( sn, conn )
 
     return( 0 );
 }
-#endif /* HAVE_LIBSASL */
+#endif /* SNET_HAVE_LIBSASL */
 
 /*
  * Just like fprintf, only use the SNET header to get the fd, and use
@@ -588,7 +588,7 @@ snet_write0( sn, buf, len, tv )
     size_t		rlen = 0;
     struct timeval	default_tv;
 
-#ifdef HAVE_LIBSASL
+#ifdef SNET_HAVE_LIBSASL
     if (( sn->sn_flag & SNET_SASL ) && ( sn->sn_saslssf )) {
 	const char		*ebuf;
 	unsigned		elen;
@@ -600,7 +600,7 @@ snet_write0( sn, buf, len, tv )
 	buf = (char*)ebuf;
 	len = elen;
     }
-#endif /* HAVE_LIBSASL */
+#endif /* SNET_HAVE_LIBSASL */
 
     if (( tv == NULL ) && ( sn->sn_flag & SNET_WRITE_TIMEOUT )) {
 	default_tv = sn->sn_write_timeout;
@@ -609,7 +609,7 @@ snet_write0( sn, buf, len, tv )
 
     if ( tv == NULL ) {
 	if ( sn->sn_flag & SNET_TLS ) {
-#ifdef HAVE_LIBSSL
+#ifdef SNET_HAVE_LIBSSL
 	    /*
 	     * If SSL_MODE_ENABLE_PARTIAL_WRITE has been set, this routine
 	     * can (abnormally) return less than a full write.
@@ -617,7 +617,7 @@ snet_write0( sn, buf, len, tv )
 	    return( SSL_write( sn->sn_ssl, buf, len ));
 #else
 	    return( -1 );
-#endif /* HAVE_LIBSSL */
+#endif /* SNET_HAVE_LIBSSL */
 	} else {
 	    return( write( snet_fd( sn ), buf, len ));
 	}
@@ -645,7 +645,7 @@ snet_write0( sn, buf, len, tv )
 	}
 
 	if ( sn->sn_flag & SNET_TLS ) {
-#ifdef HAVE_LIBSSL
+#ifdef SNET_HAVE_LIBSSL
 	    /*
 	     * Make sure we ARE allowing partial writes.  This can't
 	     * be turned off!!!
@@ -676,7 +676,7 @@ snet_write0( sn, buf, len, tv )
 	    }
 #else
 	    goto restoreblocking;
-#endif /* HAVE_LIBSSL */
+#endif /* SNET_HAVE_LIBSSL */
 	} else {
 	    if (( rc = write( snet_fd( sn ), buf, len )) < 0 ) {
 		if ( errno == EAGAIN ) {
@@ -718,7 +718,7 @@ snet_setcompression( sn, type, level )
     int		type;
     int		level;
 {
-#ifdef HAVE_ZLIB
+#ifdef SNET_HAVE_ZLIB
     int		len = 0;
 
     if ( sn->sn_flag & SNET_ZLIB ) {
@@ -763,9 +763,9 @@ snet_setcompression( sn, type, level )
     sn->sn_flag |= type;
     return( 0 );
 
-#else /* HAVE_ZLIB */
+#else /* SNET_HAVE_ZLIB */
     return( -1 );
-#endif /* HAVE_ZLIB */
+#endif /* SNET_HAVE_ZLIB */
 }
 
     static ssize_t
@@ -775,15 +775,15 @@ snet_read0( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
-#ifdef HAVE_ZLIB
+#ifdef SNET_HAVE_ZLIB
     ssize_t rr;
-#endif /* HAVE_ZLIB */
+#endif /* SNET_HAVE_ZLIB */
 
     if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
 	return snet_read1( sn, buf, len, tv );
     }
 
-#ifdef HAVE_ZLIB
+#ifdef SNET_HAVE_ZLIB
     sn->sn_zistream.avail_out = len;
     sn->sn_zistream.next_out  = (unsigned char *)buf;
 
@@ -804,9 +804,9 @@ snet_read0( sn, buf, len, tv )
     } while ( sn->sn_zistream.avail_out == len );
     return( len - sn->sn_zistream.avail_out );
 
-#else /* HAVE_ZLIB */
+#else /* SNET_HAVE_ZLIB */
     return( -1 );
-#endif /* HAVE_ZLIB */
+#endif /* SNET_HAVE_ZLIB */
 }
 
     ssize_t
@@ -816,16 +816,16 @@ snet_write( sn, buf, len, tv )
     size_t		len;
     struct timeval	*tv;
 {
-#ifdef HAVE_ZLIB
+#ifdef SNET_HAVE_ZLIB
     char		cobuf[ 8192 ];
     size_t		zlen;
-#endif /* HAVE_ZLIB */
+#endif /* SNET_HAVE_ZLIB */
 
     if (( sn->sn_flag & SNET_ZLIB ) == 0 ) {
 	return snet_write0( sn, buf, len, tv );
     }
 
-#ifdef HAVE_ZLIB
+#ifdef SNET_HAVE_ZLIB
     /* XXX What if len == 0 ? */
     sn->sn_zostream.avail_in = len;
     sn->sn_zostream.next_in  = (unsigned char *)buf;
@@ -849,10 +849,10 @@ snet_write( sn, buf, len, tv )
 	}
     } while ( sn->sn_zostream.avail_in > 0 || sn->sn_zostream.avail_out == 0 );
     return( len );
-#else /* HAVE_ZLIB */
+#else /* SNET_HAVE_ZLIB */
 
     return( -1 );
-#endif /* HAVE_ZLIB */
+#endif /* SNET_HAVE_ZLIB */
 }
 
     static ssize_t
@@ -875,12 +875,12 @@ snet_read1( sn, buf, len, tv )
 
     if ( tv ) {
 	dontblock = 1;
-#ifdef HAVE_LIBSSL
+#ifdef SNET_HAVE_LIBSSL
 	/* Check to see if there is already data in SSL buffer */
 	if ( sn->sn_flag & SNET_TLS ) {
 	    dontblock = ! SSL_pending( sn->sn_ssl );
 	}
-#endif /* HAVE_LIBSSL */
+#endif /* SNET_HAVE_LIBSSL */
     }
 
     if ( dontblock ) {
@@ -908,7 +908,7 @@ retry:
     }
 
     if ( sn->sn_flag & SNET_TLS ) {
-#ifdef HAVE_LIBSSL
+#ifdef SNET_HAVE_LIBSSL
 	if (( rc = SSL_read( sn->sn_ssl, buf, len )) < 0 ) {
 	    switch ( SSL_get_error( sn->sn_ssl, rc )) {
 	    case SSL_ERROR_WANT_WRITE :
@@ -931,9 +931,9 @@ retry:
 		goto restoreblocking;
 	    }
 	}
-#else /* HAVE_LIBSSL */
+#else /* SNET_HAVE_LIBSSL */
 	rc = -1;
-#endif /* HAVE_LIBSSL */
+#endif /* SNET_HAVE_LIBSSL */
     } else {
 	rc = read( snet_fd( sn ), buf, len );
     }
@@ -947,7 +947,7 @@ retry:
 	}
     }
 
-#ifdef HAVE_LIBSASL
+#ifdef SNET_HAVE_LIBSASL
     if (( sn->sn_flag & SNET_SASL ) && ( sn->sn_saslssf )) {
 	/* Decode via SASL */
 	const char	*dbuf;
@@ -963,7 +963,7 @@ retry:
 	memcpy( buf, dbuf, dbuf_len );
 	rc = dbuf_len;
     }
-#endif /* HAVE_LIBSASL */
+#endif /* SNET_HAVE_LIBSASL */
 
     return( rc );
 

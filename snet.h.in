@@ -14,6 +14,9 @@
 #define ___P(x)		()
 #endif /* __STDC__ */
 
+#include <sys/time.h>
+#include <sys/types.h>
+
 #ifdef SNET_HAVE_LIBSSL
 #include <openssl/ssl.h>
 #endif /* HAVE_LIBSSL */

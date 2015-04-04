@@ -1,5 +1,4 @@
-# Process this file with autoconf to produce a configure script.
-AC_INIT(libsnet, 1.1.0, rsug@umich.edu) 
+AC_INIT(libsnet, m4_esyscmd([sh version.sh]), simta@umich.edu) 
 AM_INIT_AUTOMAKE([foreign])
 AC_PREREQ(2.52)
 AC_COPYRIGHT([Copyright (c) 1995-2015 Regents of The University of Michigan])
@@ -14,44 +13,51 @@ AC_CANONICAL_HOST
 AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_INSTALL
+AC_PROG_LIBTOOL
+
+# Checks for functions
+AC_FUNC_MALLOC
+AC_FUNC_REALLOC
+AC_CHECK_FUNCS_ONCE([gettimeofday select])
 
 # Checks for libraries.
-CONFIG_PREFIX="SNET_"
-AX_WITH_LIBRARY([zlib], [ZLIB], [zlib.h], [z])
-AX_WITH_LIBRARY([ssl], [LIBSSL], [openssl/ssl.h], [ssl], [-lcrypto])
-AX_WITH_LIBRARY([sasl2], [LIBSASL], [sasl/sasl.h], [sasl2])
+AC_ARG_WITH([sasl], AC_HELP_STRING([--with-sasl], [Build with sasl]))
+AS_IF(
+    [test "x$with_sasl" = "xyes"], [
+        PKG_CHECK_MODULES([LIBSASL], [libsasl2], [
+            CONFIG_DEFINES="$CONFIG_DEFINES
+#ifndef SNET_HAVE_LIBSASL
+#define SNET_HAVE_LIBSASL
+#endif"
+            PKGCONF_REQUIRES="$PKGCONF_REQUIRES libsasl2"
+])])
 
+AC_ARG_WITH([ssl], AC_HELP_STRING([--with-ssl], [Build with TLS support]))
+AS_IF(
+    [test "x$with_ssl" != "xno" ], [
+        PKG_CHECK_MODULES([LIBSSL], [openssl], [
+            CONFIG_DEFINES="$CONFIG_DEFINES
+#ifndef SNET_HAVE_LIBSSL
+#define SNET_HAVE_LIBSSL
+#endif"
+            PKGCONF_REQUIRES="$PKGCONF_REQUIRES openssl"
+])])
+
+AC_ARG_WITH([zlib], AC_HELP_STRING([--with-zlib], [Build with zlib support]))
+AS_IF(
+    [test "x$with_zlib" = "xyes" ], [
+        PKG_CHECK_MODULES([ZLIB], [zlib], [
+            CONFIG_DEFINES="$CONFIG_DEFINES
+#ifndef SNET_HAVE_ZLIB
+#define SNET_HAVE_ZLIB
+#endif"
+            PKGCONF_REQUIRES="$PKGCONF_REQUIRES zlib"
+])])
+
+AC_SUBST([PKGCONF_REQUIRES])
 AC_SUBST([CONFIG_DEFINES])
 AM_SUBST_NOTMAKE([CONFIG_DEFINES])
 
-LIBS="$EXTRALIBS $LIBS"
-
-CHECK_UNIVERSAL_BINARIES
-MACOSX_MUTE_DEPRECATION_WARNINGS
-
-# Checks for header files.
-#AC_HEADER_STDC
-#AC_CHECK_HEADERS([fcntl.h inttypes.h netinet/in.h stdlib.h string.h sys/param.h sys/time.h unistd.h])
-
-# Checks for typedefs, structures, and compiler characteristics.
-#AC_HEADER_TIME
-
-# Checks for library functions.
-#AC_FUNC_MALLOC
-#AC_FUNC_REALLOC
-#AC_CHECK_FUNCS([gettimeofday select])
-
-# Checks for how to build libraries
-CHECK_PROFILED
-AC_DISABLE_SHARED
-AC_PROG_LIBTOOL  # Checks whether to build shared and/or static libraries
-
-# Miscellaneous:
-if test x_$GCC = x_yes; then
-    OPTOPTS=${OPTOPTS:-"-Wall -Wmissing-prototypes"}
-fi
-AC_SUBST(OPTOPTS)
-
-# Write output:
-AC_CONFIG_FILES([Makefile snet.h packaging/rpm/libsnet.spec])
+# Write output
+AC_CONFIG_FILES([Makefile snet.h packaging/rpm/libsnet.spec packaging/pkgconfig/libsnet.pc])
 AC_OUTPUT

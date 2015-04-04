@@ -1,5 +1,4 @@
 # package options
-%define with_sasl2      yes
 
 Summary:        A simple TCP communications library
 Name:           @PACKAGE_NAME@
@@ -9,12 +8,9 @@ License:        BSD
 Group:          System Environment/Libraries
 URL:            http://its.umich.edu/
 Source0:        %{name}-%{version}.tar.gz
-BuildRequires:  openssl-devel
+BuildRequires:  pkgconfig(libsasl2)
+BuildRequires:  pkgconfig(openssl)
 Requires:       openssl
-%if "%{with_sasl2}" == "yes"
-BuildRequires:  cyrus-sasl-devel
-Requires: %{_sbindir}/saslauthd
-%endif
 BuildRequires:  setup
 
 %description
@@ -34,11 +30,8 @@ Headers for libsnet
 
 %build
 %configure \
-%if "%{with_sasl2}" != "yes"
-	--with-sasl=no \
-%endif
-	--with-zlib=no \
-        --enable-shared
+	--with-sasl=yes \
+	--with-zlib=no
 
 make %{?_smp_mflags} 
 
@@ -57,6 +50,7 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %{_libdir}/libsnet.a
 %{_libdir}/libsnet.la
+%{_libdir}/pkgconfig/libsnet.pc
 %{_includedir}/snet.h
 
 %changelog
