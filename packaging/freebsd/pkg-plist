@@ -1,0 +1,6 @@
+include/snet.h
+lib/libsnet.a
+lib/libsnet.so
+lib/libsnet.so.0
+lib/libsnet.so.0.1.0
+libdata/pkgconfig/libsnet.pc
