@@ -42,14 +42,19 @@ make DESTDIR=%{buildroot} INSTALL_OPTS='' install
 %clean
 rm -rf %{buildroot}
 
+%post -p /sbin/ldconfig
+
+%postun -p /sbin/ldconfig
+
 %files
 %defattr(-,root,root,-)
-%{_libdir}/libsnet.so*
+%{_libdir}/libsnet.so.*
 
 %files devel
 %defattr(-,root,root,-)
 %{_libdir}/libsnet.a
 %{_libdir}/libsnet.la
+%{_libdir}/libsnet.so
 %{_libdir}/pkgconfig/libsnet.pc
 %{_includedir}/snet.h
 
