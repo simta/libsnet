@@ -60,11 +60,11 @@ snet_attach( fd, max )
 {
     SNET		*sn;
 
-    if (( sn = (SNET *)malloc( sizeof( SNET ))) == NULL ) {
+    if (( sn = malloc( sizeof( SNET ))) == NULL ) {
 	return( NULL );
     }
     sn->sn_fd = fd;
-    if (( sn->sn_rbuf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
+    if (( sn->sn_rbuf = malloc( SNET_BUFLEN )) == NULL ) {
 	free( sn );
 	return( NULL );
     }
@@ -73,7 +73,7 @@ snet_attach( fd, max )
     sn->sn_rcur = sn->sn_rend = sn->sn_rbuf;
     sn->sn_maxlen = max;
 
-    if (( sn->sn_wbuf = (char *)malloc( SNET_BUFLEN )) == NULL ) {
+    if (( sn->sn_wbuf = malloc( SNET_BUFLEN )) == NULL ) {
 	free( sn->sn_rbuf );
 	free( sn );
 	return( NULL );
@@ -318,7 +318,7 @@ snet_writeftv( sn, tv, format, va_alist )
 
 #define SNET_WBUFGROW(x)						\
 	    while ( cur + (x) > end ) {					\
-		if (( sn->sn_wbuf = (char *)realloc( sn->sn_wbuf,	\
+		if (( sn->sn_wbuf = realloc( sn->sn_wbuf,	        \
 			sn->sn_wbuflen + SNET_BUFLEN )) == NULL ) {	\
 		    abort();						\
 		}							\
@@ -1084,7 +1084,7 @@ snet_getline( sn, tv )
 		    errno = ENOMEM;
 		    return( NULL );
 		}
-		if (( sn->sn_rbuf = (char *)realloc( sn->sn_rbuf,
+		if (( sn->sn_rbuf = realloc( sn->sn_rbuf,
 			sn->sn_rbuflen + SNET_BUFLEN )) == NULL ) {
 		    exit( 1 );
 		}
