@@ -2,7 +2,7 @@
 
 Summary:        A simple TCP communications library
 Name:           @PACKAGE_NAME@
-Version:        @PACKAGE_VERSION@ 
+Version:        @PACKAGE_VERSION@
 Release:        1%{?dist}
 License:        BSD
 Group:          System Environment/Libraries
@@ -10,7 +10,6 @@ URL:            http://its.umich.edu/
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  pkgconfig(libsasl2)
 BuildRequires:  pkgconfig(openssl)
-Requires:       openssl
 BuildRequires:  setup
 
 %description
@@ -30,14 +29,16 @@ Headers for libsnet
 
 %build
 %configure \
+        --disable-static \
 	--with-sasl=yes \
 	--with-zlib=no
 
-make %{?_smp_mflags} 
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
 make DESTDIR=%{buildroot} INSTALL_OPTS='' install
+rm -f %{buildroot}/%{_libdir}/libsnet.la
 
 %clean
 rm -rf %{buildroot}
@@ -52,8 +53,6 @@ rm -rf %{buildroot}
 
 %files devel
 %defattr(-,root,root,-)
-%{_libdir}/libsnet.a
-%{_libdir}/libsnet.la
 %{_libdir}/libsnet.so
 %{_libdir}/pkgconfig/libsnet.pc
 %{_includedir}/snet.h
