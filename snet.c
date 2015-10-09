@@ -56,7 +56,7 @@ snet_eof( SNET *sn )
     SNET *
 snet_attach( fd, max )
     int		fd;
-    int		max;
+    size_t	max;
 {
     SNET		*sn;
 
@@ -90,6 +90,7 @@ snet_open( path, flags, mode, max )
     char	*path;
     int		flags;
     int		mode;
+    size_t      max;
 {
     int		fd;
 
@@ -274,7 +275,7 @@ snet_setsasl( sn, conn )
     }
     sn->sn_saslmaxout = *maxp;
 
-    sn->sn_conn = conn;
+    sn->sn_saslconn = conn;
     sn->sn_flag |= SNET_SASL;
 
     return( 0 );
@@ -301,7 +302,8 @@ snet_writeftv( sn, tv, format, va_alist )
     va_list		vl;
     char		dbuf[ 128 ], *p;
     char		*dbufoff;
-    int			d, len;
+    int			d;
+    size_t              len;
     long		l;
     long long		ll;
     unsigned int	u_d;
@@ -325,7 +327,7 @@ snet_writeftv( sn, tv, format, va_alist )
 		cur = sn->sn_wbuf + sn->sn_wbuflen - ( end - cur );	\
 		sn->sn_wbuflen += SNET_BUFLEN;				\
 		end = sn->sn_wbuf + sn->sn_wbuflen;			\
-	    }		
+	    }
 
     cur = sn->sn_wbuf;
     end = sn->sn_wbuf + sn->sn_wbuflen;
@@ -353,7 +355,7 @@ modifier:
 
 	    case 'c' :
 		SNET_WBUFGROW( 1 );
-		*cur++ = va_arg( vl, int );
+		*cur++ = (char)va_arg( vl, int );
 		break;
 
 	    case 'l' :
@@ -416,7 +418,7 @@ modifier:
 		    }
 		}
 
-		len = p - dbufoff;
+		len = (size_t)( p - dbufoff );
 		SNET_WBUFGROW( len );
 		memcpy( cur, dbufoff, len );
 		cur += len;
@@ -445,7 +447,7 @@ modifier:
 		    SNET_WF_O( u_d );
 		}
 
-		len = p - dbufoff;
+		len = (size_t)( p - dbufoff );
 		SNET_WBUFGROW( len );
 		memcpy( cur, dbufoff, len );
 		cur += len;
@@ -475,7 +477,7 @@ modifier:
 		    SNET_WF_X( u_d );
 		}
 
-		len = p - dbufoff;
+		len = (size_t)( p - dbufoff );
 		SNET_WBUFGROW( len );
 		memcpy( cur, dbufoff, len );
 		cur += len;
@@ -505,7 +507,7 @@ modifier:
 		    SNET_WF_XX( u_d );
 		}
 
-		len = p - dbufoff;
+		len = (size_t)( p - dbufoff );
 		SNET_WBUFGROW( len );
 		memcpy( cur, dbufoff, len );
 		cur += len;
@@ -522,7 +524,7 @@ modifier:
 
     va_end( vl );
 
-    return( snet_write( sn, sn->sn_wbuf, cur - sn->sn_wbuf, tv ));
+    return( snet_write( sn, sn->sn_wbuf, (size_t)( cur - sn->sn_wbuf ), tv ));
 }
 
 /*
@@ -584,8 +586,9 @@ snet_write0( sn, buf, len, tv )
     struct timeval	*tv;
 {
     fd_set		fds;
-    int			rc, oflags;
-    size_t		rlen = 0;
+    ssize_t             rc;
+    int			oflags;
+    ssize_t		rlen = 0;
     struct timeval	default_tv;
 
 #ifdef SNET_HAVE_LIBSASL
@@ -594,7 +597,8 @@ snet_write0( sn, buf, len, tv )
 	unsigned		elen;
 
 	/* Encode if SASL needs it */
-	if (( sasl_encode( sn->sn_conn, buf, len, &ebuf, &elen )) != SASL_OK ) {
+	if (( sasl_encode( sn->sn_saslconn, buf, len,
+                &ebuf, &elen )) != SASL_OK ) {
 	    return( -1 );
 	}
 	buf = (char*)ebuf;
@@ -742,7 +746,7 @@ snet_setcompression( sn, type, level )
     if ( snet_hasdata( sn )) {
 	len = sn->sn_rend - sn->sn_rcur;
     }
-	
+
 #ifndef max
 #define max(a,b)	(((a)<(b))?(b):(a))
 #endif /* max */
@@ -953,7 +957,7 @@ retry:
 	const char	*dbuf;
 	unsigned	dbuf_len;
 
-	if ( sasl_decode( sn->sn_conn, buf, rc, &dbuf, &dbuf_len )
+	if ( sasl_decode( sn->sn_saslconn, buf, rc, &dbuf, &dbuf_len )
 		!= SASL_OK ) {
 	    return( -1 );
 	}

@@ -5,7 +5,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 
 lib_LTLIBRARIES = libsnet.la
 libsnet_la_SOURCES = snet.c snet.h
-libsnet_la_LDFLAGS = -version-info 1:0:1
+libsnet_la_LDFLAGS = -version-info 2:0:0
 
 include_HEADERS = snet.h
 
