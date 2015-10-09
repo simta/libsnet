@@ -289,12 +289,12 @@ snet_setsasl( sn, conn )
  */
     ssize_t
 #ifdef __STDC__
-snet_writeftv( SNET *sn, struct timeval *tv, char *format, ... )
+snet_writeftv( SNET *sn, struct timeval *tv, const char *format, ... )
 #else /* __STDC__ */
 snet_writeftv( sn, tv, format, va_alist )
     SNET		*sn;
     struct timeval	*tv;
-    char		*format;
+    const char		*format;
     va_dcl
 #endif /* __STDC__ */
 {
