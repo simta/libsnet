@@ -538,12 +538,29 @@ snet_select( int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
 	struct timeval *tv )
 {
 #ifndef linux
-    struct timeval	tv_begin, tv_end;
+#if _POSIX_TIMERS > 0
+    struct timespec	tv_begin, tv_end;
+#ifdef CLOCK_MONOTONIC_COARSE
+    clockid_t           clock = CLOCK_MONOTONIC_COARSE;
+#elif defined(CLOCK_MONOTONIC_FAST)
+    clockid_t           clock = CLOCK_MONOTONIC_FAST;
+#elif _POSIX_MONOTONIC_CLOCK > 0
+    clockid_t           clock = CLOCK_MONOTONIC;
+#else
+    clockid_t           clock = CLOCK_REALTIME
+#endif /* CLOCK_MONOTONIC_COARSE */
+#else /* _POSIX_TIMERS */
+    struct timeval      tv_begin, tv_end;
+#endif /* _POSIX_TIMERS */
 #endif /* linux */
     int			rc;
 
 #ifndef linux
+#if _POSIX_TIMERS > 0
+    if ( clock_gettime( clock, &tv_begin ) < 0 ) {
+#else
     if ( gettimeofday( &tv_begin, NULL ) < 0 ) {
+#endif /* _POSIX_TIMERS */
 	return( -1 );
     }
 #endif /* linux */
@@ -551,15 +568,27 @@ snet_select( int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
     rc = select( nfds, rfds, wfds, efds, tv );
 
 #ifndef linux
+#if _POSIX_TIMERS > 0
+    if ( clock_gettime( clock, &tv_end ) < 0 ) {
+#else
     if ( gettimeofday( &tv_end, NULL ) < 0 ) {
+#endif /* _POSIX_TIMERS */
 	return( -1 );
     }
 
-    if ( tv_begin.tv_usec > tv_end.tv_usec ) {
-	tv_end.tv_usec += 1000000;
+#if _POSIX_TIMERS > 0
+    if ( tv_begin.tv_nsec > tv_end.tv_nsec ) {
+	tv_end.tv_nsec += 1000000000;
 	tv_end.tv_sec -= 1;
     }
+    if (( tv->tv_usec -= (( tv_end.tv_nsec - tv_begin.tv_nsec ) / 1000 )) < 0 ) {
+#else
+    if ( tv_begin.tv_usec > tv_end.tv_usec ) {
+        tv_end.tv_usec += 1000000;
+        tv_end.tv_sec -= 1;
+    }
     if (( tv->tv_usec -= ( tv_end.tv_usec - tv_begin.tv_usec )) < 0 ) {
+#endif
 	tv->tv_usec += 1000000;
 	tv->tv_sec -= 1;
     }
