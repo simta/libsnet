@@ -1,5 +1,5 @@
 AC_INIT(libsnet, m4_esyscmd([sh version.sh]), simta@umich.edu) 
-AM_INIT_AUTOMAKE([foreign])
+AM_INIT_AUTOMAKE([foreign no-dist-gzip dist-xz])
 AC_PREREQ(2.52)
 AC_COPYRIGHT([Copyright (c) 1995-2015 Regents of The University of Michigan])
 AC_CONFIG_HEADER(config.h)

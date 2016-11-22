@@ -7,7 +7,7 @@ Release:        1%{?dist}
 License:        BSD
 Group:          System Environment/Libraries
 URL:            http://its.umich.edu/
-Source0:        %{name}-%{version}.tar.gz
+Source0:        %{name}-%{version}.tar.xz
 BuildRequires:  pkgconfig(libsasl2)
 BuildRequires:  pkgconfig(openssl)
 BuildRequires:  setup
