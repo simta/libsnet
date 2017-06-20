@@ -547,7 +547,7 @@ snet_select( int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
 #elif _POSIX_MONOTONIC_CLOCK > 0
     clockid_t           clock = CLOCK_MONOTONIC;
 #else
-    clockid_t           clock = CLOCK_REALTIME
+    clockid_t           clock = CLOCK_REALTIME;
 #endif /* CLOCK_MONOTONIC_COARSE */
 #else /* _POSIX_TIMERS */
     struct timeval      tv_begin, tv_end;
