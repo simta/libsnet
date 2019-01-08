@@ -87,7 +87,7 @@ snet_attach( fd, max )
 
     SNET *
 snet_open( path, flags, mode, max )
-    char	*path;
+    const char	*path;
     int		flags;
     int		mode;
     size_t      max;

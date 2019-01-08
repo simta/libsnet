@@ -81,7 +81,7 @@ typedef struct {
 
 int	snet_eof ___P(( SNET * ));
 SNET	*snet_attach ___P(( int, size_t ));
-SNET	*snet_open ___P(( char *, int, int, size_t ));
+SNET	*snet_open ___P(( const char *, int, int, size_t ));
 int	snet_close ___P(( SNET * ));
 ssize_t	snet_writeftv ___P(( SNET *, struct timeval *, const char *, ... ));
 char	*snet_getline ___P(( SNET *, struct timeval * ));
